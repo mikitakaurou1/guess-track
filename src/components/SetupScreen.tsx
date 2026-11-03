@@ -125,7 +125,7 @@ export default function SetupScreen({
   const guests = room.guests;
   const totalPlayers = localCount + guests.length;
   const playersOk = totalPlayers >= 1 && totalPlayers <= 5;
-  const joinLink = room.code ? `${location.origin}/?room=${room.code}` : '';
+  const joinLink = room.code ? `${location.origin}${location.pathname}?room=${room.code}` : '';
 
   const start = () => {
     const localNames = names.slice(0, localCount).map((n, i) => n.trim() || `Игрок ${i + 1}`);
