@@ -8,6 +8,11 @@ import type { GameConfig, Track } from '../types/game';
 const GUEST_WAIT_MS = 4000; // сколько хост ждёт, пока гости подготовят трек
 const START_TIMEOUT_MS = 6000; // сколько ждём первого прогресса после запуска
 
+// На телефонах и планшетах браузер часто не даёт запустить звук без непосредственного нажатия пользователя
+const TOUCH =
+  typeof window !== 'undefined' &&
+  (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
+
 export interface SourceStat {
   label: string;
   count: number;
@@ -33,6 +38,7 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
   const [positionMs, setPositionMs] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const [needTap, setNeedTap] = useState(false); // браузер ждёт нажатия, чтобы включить звук
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -72,6 +78,11 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     });
   }, [player]);
 
+  // Кнопка «включить звук» сбрасывается, как только раунд вышел из загрузки
+  useEffect(() => {
+    if (state.phase !== 'loading') setNeedTap(false);
+  }, [state.phase]);
+
   // Начало раунда: подготовка трека -> ожидание гостей -> одновременный старт
   useEffect(() => {
     if (state.phase !== 'loading' || !player || !state.order.length || state.stalled) return;
@@ -82,6 +93,7 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     const remote = (state.config?.owners ?? []).some((o) => o !== null);
     let cancelled = false;
     setPositionMs(0);
+    setNeedTap(false);
 
     const fail = () => dispatch({ type: 'TRACK_FAILED', attempt });
     const wdLoad = setTimeout(fail, LOAD_TIMEOUT_MS);
@@ -107,7 +119,11 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
         fail();
         return;
       }
-      wdStart = setTimeout(fail, START_TIMEOUT_MS);
+      // Если звук не пошёл: на телефоне просим нажать кнопку (браузер блокирует автозапуск), на компьютере меняем трек
+      wdStart = setTimeout(() => {
+        if (TOUCH) setNeedTap(true);
+        else fail();
+      }, START_TIMEOUT_MS);
     })();
 
     return () => {
@@ -117,6 +133,19 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, state.attempt, state.stalled, player]);
+
+  // Нажатие «включить звук»: запуск внутри жеста пользователя (вызов должен быть синхронным)
+  const tapToStart = useCallback(() => {
+    if (!player) return;
+    const attempt = stateRef.current.attempt;
+    setNeedTap(false);
+    void player.startPrepared();
+    // если и после нажатия звука нет — трек действительно не играет, меняем его
+    setTimeout(() => {
+      const s = stateRef.current;
+      if (s.phase === 'loading' && s.attempt === attempt) dispatch({ type: 'TRACK_FAILED', attempt });
+    }, START_TIMEOUT_MS);
+  }, [player]);
 
   // Побочные эффекты при смене фазы
   useEffect(() => {
@@ -229,6 +258,8 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     positionMs,
     loadError,
     isLoadingPlaylist,
+    needTap,
+    tapToStart,
     loadSources,
     clearPlaylist: () => {
       setPlaylist([]);

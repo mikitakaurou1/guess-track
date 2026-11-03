@@ -75,6 +75,8 @@ export default function App() {
                 state={state}
                 track={game.track}
                 positionMs={game.positionMs}
+                needTap={game.needTap}
+                onTapStart={game.tapToStart}
                 onBuzz={game.buzz}
                 onSubmit={game.submitAnswer}
                 onTimeout={game.answerTimeout}

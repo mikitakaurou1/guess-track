@@ -12,6 +12,8 @@ interface Props {
   state: GameState;
   track: Track | null;
   positionMs: number;
+  needTap: boolean;
+  onTapStart: () => void;
   onBuzz: (player: number) => void;
   onSubmit: (text: string) => void;
   onTimeout: () => void;
@@ -22,7 +24,7 @@ interface Props {
 }
 
 export default function GameScreen({
-  state, positionMs, onBuzz, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry,
+  state, positionMs, needTap, onTapStart, onBuzz, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry,
 }: Props) {
   const config = state.config!;
   const names = config.playerNames;
@@ -47,7 +49,11 @@ export default function GameScreen({
 
   let status = '';
   if (state.phase === 'loading') {
-    status = state.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
+    status = needTap
+      ? 'Браузер ждёт вашего нажатия, чтобы включить звук'
+      : state.failStreak > 0
+        ? 'Трек не отвечает — подбираем другой...'
+        : 'Загружаем трек...';
   } else if (state.phase === 'playing') status = 'Слушайте... кто первый нажмёт?';
   else if (state.phase === 'answering' && state.current !== null) status = 'Пауза — идёт ответ';
 
@@ -71,6 +77,14 @@ export default function GameScreen({
       <Equalizer active={state.phase === 'playing' || state.phase === 'reveal'} />
       <div className="status">{status}</div>
       {state.phase !== 'reveal' && <ProgressBar fraction={clipLeft} />}
+
+      {state.phase === 'loading' && needTap && !state.stalled && (
+        <div className="row center">
+          <button className="btn btn-primary btn-lg" onClick={onTapStart}>
+            <Icon name="volume" size={18} /> Нажмите, чтобы включить звук
+          </button>
+        </div>
+      )}
 
       {la && state.phase !== 'reveal' && (
         <div className="toast bad">
