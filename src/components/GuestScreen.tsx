@@ -9,11 +9,16 @@ import Equalizer from './Equalizer';
 interface Props {
   snap: GuestSnapshot;
   myId: string;
+  soundOn: boolean;
+  onToggleSound: () => void;
+  onResync: () => void;
   onBuzz: (player: number) => void;
   onAnswer: (text: string) => void;
 }
 
-export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
+export default function GuestScreen({
+  snap, myId, soundOn, onToggleSound, onResync, onBuzz, onAnswer,
+}: Props) {
   const mine = snap.owners.map((o, i) => (o === myId ? i : -1)).filter((i) => i >= 0);
 
   if (snap.phase === 'setup') {
@@ -33,10 +38,13 @@ export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
   const myTurn = snap.phase === 'answering' && snap.current !== null && mine.includes(snap.current);
 
   let status = '';
-  if (snap.phase === 'loading') status = snap.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
-  else if (snap.phase === 'playing') status = 'Слушайте... кто первый нажмёт?';
-  else if (snap.phase === 'clipDone') status = 'Фрагмент закончился — можно ещё попробовать';
-  else if (snap.phase === 'answering' && snap.current !== null) {
+  if (snap.phase === 'loading') {
+    status = snap.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
+  } else if (snap.phase === 'playing') {
+    status = 'Слушайте... кто первый нажмёт?';
+  } else if (snap.phase === 'clipDone') {
+    status = 'Фрагмент закончился — можно ещё попробовать';
+  } else if (snap.phase === 'answering' && snap.current !== null) {
     status = myTurn ? 'Ваша очередь отвечать!' : `Отвечает: ${snap.names[snap.current]}`;
   }
 
@@ -44,8 +52,18 @@ export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
 
   return (
     <section className="glass">
-      <div className="round-info">
-        Трек <b className="grad">{snap.round + 1}</b> / {snap.total}
+      <div className="row between">
+        <div className="round-info">
+          Трек <b className="grad">{snap.round + 1}</b> / {snap.total}
+        </div>
+        <div className="row">
+          <button className="btn btn-ghost" onClick={onToggleSound}>
+            {soundOn ? '🔊 Звук вкл' : '🔇 Звук выкл'}
+          </button>
+          {soundOn && (
+            <button className="btn btn-ghost" onClick={onResync}>Нет звука?</button>
+          )}
+        </div>
       </div>
 
       <Equalizer active={snap.phase === 'playing' || snap.phase === 'reveal'} />
@@ -86,7 +104,9 @@ export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
         />
       )}
 
-      {snap.phase === 'reveal' && snap.reveal && <RevealPanel record={snap.reveal} playerNames={snap.names} />}
+      {snap.phase === 'reveal' && snap.reveal && (
+        <RevealPanel record={snap.reveal} playerNames={snap.names} />
+      )}
     </section>
   );
 }
