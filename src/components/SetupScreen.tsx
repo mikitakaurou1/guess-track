@@ -12,7 +12,6 @@ interface Props {
   sources: SourceStat[];
   room: HostRoom;
   onLoadSources: (urls: string[]) => void;
-  onLoadLinks: (text: string) => void;
   onChangePlaylist: () => void;
   onStart: (config: GameConfig) => void;
   onJoinMode: () => void;
@@ -20,11 +19,9 @@ interface Props {
 
 export default function SetupScreen({
   ready, busy, error, playlist, sources, room,
-  onLoadSources, onLoadLinks, onChangePlaylist, onStart, onJoinMode,
+  onLoadSources, onChangePlaylist, onStart, onJoinMode,
 }: Props) {
-  const [mode, setMode] = useState<'sources' | 'links'>('sources');
   const [urls, setUrls] = useState<string[]>(['']);
-  const [linksText, setLinksText] = useState(() => localStorage.getItem('savedLinks') ?? '');
   const [localError, setLocalError] = useState('');
 
   const [localCount, setLocalCount] = useState(1);
@@ -53,66 +50,35 @@ export default function SetupScreen({
         <div className="step">Шаг 1 из 2</div>
         <h2>Откуда брать треки</h2>
 
-        <div className="seg">
-          <button className={mode === 'sources' ? 'on' : ''} onClick={() => setMode('sources')}>Профили / плейлисты</button>
-          <button className={mode === 'links' ? 'on' : ''} onClick={() => setMode('links')}>Список ссылок</button>
-        </div>
-
-        {mode === 'sources' ? (
-          <>
-            <p className="muted">
-              Ссылка на профиль (возьмём лайки) или на публичный плейлист. Если источников несколько,
-              в игре будет поровну треков от каждого.
-            </p>
-            {urls.map((u, i) => (
-              <div key={i} className="name-field">
-                <span className={`avatar c${i}`}>{i + 1}</span>
-                <input
-                  className="input"
-                  value={u}
-                  onChange={(e) => setUrls((p) => p.map((x, k) => (k === i ? e.target.value : x)))}
-                  onKeyDown={(e) => e.key === 'Enter' && load()}
-                  placeholder="soundcloud.com/username или ссылка на плейлист"
-                />
-                {urls.length > 1 && (
-                  <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>
-                    <Icon name="x" size={16} />
-                  </button>
-                )}
-              </div>
-            ))}
-            {urls.length < 5 && (
-              <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>
-                <Icon name="plus" size={16} /> Добавить источник
+        <p className="muted">
+          Ссылка на профиль (возьмём лайки) или на публичный плейлист. Если источников несколько,
+          в игре будет поровну треков от каждого.
+        </p>
+        {urls.map((u, i) => (
+          <div key={i} className="name-field">
+            <span className={`avatar c${i}`}>{i + 1}</span>
+            <input
+              className="input"
+              value={u}
+              onChange={(e) => setUrls((p) => p.map((x, k) => (k === i ? e.target.value : x)))}
+              onKeyDown={(e) => e.key === 'Enter' && load()}
+              placeholder="soundcloud.com/username или ссылка на плейлист"
+            />
+            {urls.length > 1 && (
+              <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>
+                <Icon name="x" size={16} />
               </button>
             )}
-            <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
-              {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить' : 'Подключаем SoundCloud...'}
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="muted">Ссылки на треки по одной в строке или файл likes.txt.</p>
-            <textarea
-              className="input"
-              rows={8}
-              value={linksText}
-              onChange={(e) => setLinksText(e.target.value)}
-              placeholder="https://soundcloud.com/artist/track"
-            />
-            <input
-              type="file"
-              accept=".txt"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) setLinksText(await f.text());
-              }}
-            />
-            <button className="btn btn-primary btn-lg" onClick={() => onLoadLinks(linksText)} disabled={!ready}>
-              Использовать список
-            </button>
-          </>
+          </div>
+        ))}
+        {urls.length < 5 && (
+          <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>
+            <Icon name="plus" size={16} /> Добавить источник
+          </button>
         )}
+        <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
+          {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить' : 'Подключаем SoundCloud...'}
+        </button>
 
         {(localError || error) && <div className="error">{localError || error}</div>}
         <button className="btn btn-ghost btn-lg" onClick={onJoinMode}>

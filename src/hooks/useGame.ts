@@ -2,7 +2,6 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { gameReducer, initialState, selectCurrentTrack } from '../game/gameReducer';
 import { LOAD_TIMEOUT_MS, type SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { fetchLikes, resolveShortUrl } from '../services/likesApi';
-import { parseLinks } from '../services/linksImport';
 import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import type { GameConfig, Track } from '../types/game';
 
@@ -154,9 +153,7 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
             } else if (p.kind === 'profile' || p.kind === 'likes') {
               lists.push(await fetchLikes(p.url));
             } else if (p.kind === 'track') {
-              throw new Error(
-                'это ссылка на один трек. Добавьте её во вкладке «Список ссылок» либо вставьте ссылку на профиль или плейлист',
-              );
+              throw new Error('это ссылка на один трек. Вставьте ссылку на профиль или плейлист');
             } else {
               throw new Error(p.reason ?? 'такая ссылка не поддерживается');
             }
@@ -191,23 +188,6 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     },
     [player],
   );
-
-  const loadFromLinks = useCallback(async (text: string) => {
-    setLoadError(null);
-    setIsLoadingPlaylist(true);
-    try {
-      const tracks = (await parseLinks(text)).map((t) => ({ ...t, source: 0 }));
-      if (!tracks.length) {
-        setLoadError('Не нашёл ни одной ссылки на трек SoundCloud.');
-        return;
-      }
-      localStorage.setItem('savedLinks', text);
-      setPlaylist(tracks);
-      setSources([{ label: 'Список ссылок', count: tracks.length }]);
-    } finally {
-      setIsLoadingPlaylist(false);
-    }
-  }, []);
 
   const startGame = useCallback(
     (config: GameConfig) => {
@@ -250,7 +230,6 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     loadError,
     isLoadingPlaylist,
     loadSources,
-    loadFromLinks,
     clearPlaylist: () => {
       setPlaylist([]);
       setSources([]);

@@ -64,7 +64,6 @@ export default function App() {
                 sources={game.sources}
                 room={room}
                 onLoadSources={game.loadSources}
-                onLoadLinks={game.loadFromLinks}
                 onChangePlaylist={game.clearPlaylist}
                 onStart={game.startGame}
                 onJoinMode={() => setMode('join')}
