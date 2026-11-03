@@ -96,7 +96,7 @@ export default function App() {
           </>
         )}
 
-        <p className='muted small center-text'>сборка: {__BUILD_TIME__}</p>
+        <p className='muted small center-text'>разработчик: mikitakaurou</p>
       </main>
     </>
   );
