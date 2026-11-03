@@ -7,6 +7,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type ProgressListener = (positionMs: number) => void;
 
+export const trackSrc = (t: { id: number; url: string }) =>
+  t.id < 0 && t.url ? t.url : `https://api.soundcloud.com/tracks/${t.id}`;
+
 export class SoundCloudPlayer {
   private widget: SCWidget;
   private listeners = new Set<ProgressListener>();
