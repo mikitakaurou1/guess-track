@@ -31,10 +31,11 @@ const LEET: Record<string, string> = {
 
 // Допустимое число опечаток по длине названия (с учётом пробелов). Верните 0, чтобы опечатки не прощались.
 function typoBudget(len: number): number {
-  if (len < 7) return 0;
-  if (len < 11) return 1;
-  if (len < 16) return 2;
-  return 3;
+  if (len < 6) return 0;
+  if (len < 10) return 1;
+  if (len < 15) return 2;
+  if (len < 20) return 3;
+  return 4;
 }
 
 // Приводим строку к «скелету»: без регистра, диакритики (й, ё), невидимых символов и знаков
@@ -54,12 +55,10 @@ function stripBrackets(s: string): string {
   return s.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ');
 }
 
+// «Артист - Название», «Артист- Название», «Артист -Название»: разделитель с пробелом хотя бы с одной стороны.
+// Дефис внутри слова (Spider-Man) не разделяется.
 function splitParts(s: string): string[] {
-  let parts = [s];
-  for (const sep of [' - ', ' \u2013 ', ' \u2014 ', ' | ', ' \u2022 ']) {
-    parts = parts.flatMap((p) => p.split(sep));
-  }
-  return parts;
+  return s.split(/\s+[-\u2013\u2014|\u2022]\s*|\s*[-\u2013\u2014|\u2022]\s+/);
 }
 
 // «LIPSTICK x 9mice» -> «LIPSTICK», «ПАПА +tewiq, ...» -> «ПАПА», «Название w/ Кто-то» -> «Название»
@@ -120,7 +119,7 @@ export function isCorrectAnswer(answer: string, title: string): boolean {
     // 1. точное совпадение «скелетов» (без регистра, знаков, «x Артист» / «+ Артист» / «feat.» / «w/»)
     if (t === a) return true;
 
-    // 2. небольшие опечатки в длинных названиях с той же первой буквой
+    // 2. небольшие опечатки в названиях из 6+ символов с той же первой буквой
     const budget = typoBudget(t.length);
     if (
       budget > 0 &&
