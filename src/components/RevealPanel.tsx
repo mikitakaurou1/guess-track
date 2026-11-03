@@ -14,7 +14,9 @@ export default function RevealPanel({ record, playerNames, isLast, onNext }: Pro
     result.kind === 'correct'
       ? `Верно! Угадал(а): ${playerNames[result.playerIndex]}`
       : result.kind === 'nobody'
-        ? 'Никто не угадал'
+        ? attempts.length > 0
+          ? 'Никто не угадал'
+          : 'Время фрагмента вышло — никто не угадал'
         : 'Трек пропущен';
 
   return (

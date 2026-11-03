@@ -191,11 +191,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, stalled: false, failStreak: 0, attempt: state.attempt + 1 };
 
     case 'CLIP_ENDED':
-      return state.phase === 'playing' ? { ...state, phase: 'clipDone' } : state;
+      // фрагмент закончился: сразу показываем название, без дополнительного времени на ответ
+      return state.phase === 'playing' ? endRound(state, { kind: 'nobody' }, state.attempts) : state;
 
     case 'BUZZ': {
       const ok =
-        (state.phase === 'playing' || state.phase === 'clipDone') &&
+        state.phase === 'playing' &&
         !state.locked.includes(action.player) &&
         action.player >= 0 &&
         action.player < (state.config?.playerNames.length ?? 0);
@@ -204,7 +205,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         phase: 'answering',
         current: action.player,
-        resumePlaying: state.phase === 'playing',
+        resumePlaying: true,
         lastAttempt: null,
       };
     }

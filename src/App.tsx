@@ -4,6 +4,7 @@ import SetupScreen from './components/SetupScreen';
 import GameScreen from './components/GameScreen';
 import FinalScreen from './components/FinalScreen';
 import GuestApp from './components/GuestApp';
+import Deco from './components/Deco';
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
@@ -41,6 +42,7 @@ export default function App() {
       <div className='bg-orb orb-1' />
       <div className='bg-orb orb-2' />
       <div className='bg-orb orb-3' />
+      <Deco />
       <main className='wrap'>
         <header className='logo'>
           <span className='logo-icon'>♪</span>

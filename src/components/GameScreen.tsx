@@ -26,7 +26,8 @@ export default function GameScreen({
   const config = state.config!;
   const names = config.playerNames;
   const owners = config.owners ?? names.map(() => null);
-  const canBuzz = state.phase === 'playing' || state.phase === 'clipDone';
+  // Жать кнопку можно только пока играет фрагмент: как только он кончился, показывается название
+  const canBuzz = state.phase === 'playing';
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -47,7 +48,6 @@ export default function GameScreen({
   if (state.phase === 'loading') {
     status = state.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
   } else if (state.phase === 'playing') status = 'Слушайте... кто первый нажмёт?';
-  else if (state.phase === 'clipDone') status = 'Фрагмент закончился — можно ещё попробовать';
   else if (state.phase === 'answering' && state.current !== null) status = 'Пауза — идёт ответ';
 
   const record = state.history[state.history.length - 1];

@@ -1,0 +1,73 @@
+/* Точечная сетка, затухающая к краям */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse at center, #000 0%, transparent 72%);
+}
+
+/* Концентрические кольца за карточкой, как на пластинке */
+.bg-rings {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.bg-rings i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  transform: translate(-50%, -50%);
+  animation: ring 9s ease-in-out infinite;
+}
+.bg-rings i:nth-child(1) { width: 780px; height: 780px; }
+.bg-rings i:nth-child(2) { width: 1040px; height: 1040px; border-color: rgba(236, 72, 153, 0.11); animation-delay: -2s; }
+.bg-rings i:nth-child(3) { width: 1320px; height: 1320px; border-color: rgba(34, 211, 238, 0.08); animation-delay: -4s; }
+.bg-rings i:nth-child(4) { width: 1640px; height: 1640px; border-color: rgba(255, 255, 255, 0.04); animation-delay: -6s; }
+@keyframes ring {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.025); }
+}
+
+/* Две колонки эквалайзера по бокам (только на широких экранах) */
+.deco-bars {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.deco-bars.l { left: 3vw; }
+.deco-bars.r { right: 3vw; }
+.deco-bars span {
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--c), var(--v) 55%, var(--p));
+  opacity: 0.32;
+  transform-origin: center;
+  animation: deco-eq 3.4s ease-in-out infinite alternate;
+}
+@keyframes deco-eq {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
+
+@media (max-width: 1100px) {
+  .deco-bars { display: none; }
+  .bg-rings i:nth-child(4) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bg-rings i, .deco-bars span { animation: none; }
+}
