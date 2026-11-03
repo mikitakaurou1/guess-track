@@ -156,7 +156,7 @@ export default function SetupScreen({
           </button>
         )}
         <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
-          {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}
+          {busy ? 'Загружаем треки...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}
         </button>
 
         {(localError || error) && <div className="error">{localError || error}</div>}
