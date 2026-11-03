@@ -24,6 +24,15 @@ const toNum = (s: string, min: number, max: number, fallback: number) => {
   return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n));
 };
 
+// Склонение: 1 игрок, 2–4 игрока, 5+ игроков
+const playersWord = (n: number) => {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return 'игрок';
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'игрока';
+  return 'игроков';
+};
+
 // Текстовое поле для целого числа: без стрелок +1/−1, только цифры, при выходе из поля значение приводится к допустимому
 function NumberField({
   value, onChange, min, max,
@@ -336,7 +345,7 @@ export default function SetupScreen({
       </div>
 
       <button className="btn btn-primary btn-lg" onClick={start} disabled={!playersOk}>
-        Начать игру ({totalPlayers} {totalPlayers === 1 ? 'игрок' : 'игроков'}) <Icon name="play" size={16} />
+        Начать игру ({totalPlayers} {playersWord(totalPlayers)})
       </button>
       {!playersOk && <p className="muted small">Нужно от 1 до 5 игроков суммарно (сейчас {totalPlayers}).</p>}
     </section>
