@@ -2,3 +2,13 @@
 .count-row .range { flex: 1; min-width: 0; margin: 0; }
 .count-row .input.count-input { flex: none; width: 88px; margin: 0; text-align: center; font-weight: 700; }
 .input.num-input { text-align: left; }
+
+/* Только на телефоне: кнопка «Добавить ещё один источник» на всю ширину и того же размера, что и нижние кнопки */
+@media (max-width: 600px) {
+  .glass > .btn.btn-ghost:not(.btn-lg) {
+    align-self: stretch;
+    width: 100%;
+    padding: 16px;
+    font-size: 17px;
+  }
+}
