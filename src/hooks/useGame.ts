@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { gameReducer, initialState, selectCurrentTrack } from '../game/gameReducer';
 import { LOAD_TIMEOUT_MS, type SoundCloudPlayer } from '../services/SoundCloudPlayer';
-import { fetchLikes, isProfileUrl } from '../services/likesApi';
+import { fetchLikes, resolveShortUrl } from '../services/likesApi';
 import { parseLinks } from '../services/linksImport';
+import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import type { GameConfig, Track } from '../types/game';
 
 const GUEST_WAIT_MS = 4000; // сколько хост ждёт, пока гости подготовят трек
@@ -17,10 +18,13 @@ export interface GameNet {
   send: (obj: unknown) => void;
 }
 
-function labelOf(url: string): string {
-  const m = url.match(/soundcloud\.com\/([^/?#]+)(?:\/sets\/([^/?#]+))?/i);
-  if (!m) return url;
-  return m[2] ? `${m[1]}/${m[2]}` : m[1];
+// Короткая подпись источника для интерфейса и сообщений об ошибках
+function labelOf(raw: string): string {
+  const p = parseSoundCloudUrl(raw);
+  const prefix = 'https://soundcloud.com/';
+  if (!p || !p.url.startsWith(prefix)) return raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
+  const parts = p.url.slice(prefix.length).split('/');
+  return p.kind === 'playlist' ? `${parts[0]}/${parts[2]}` : parts[0];
 }
 
 export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
@@ -138,11 +142,27 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
         if (!clean.length) throw new Error('Вставьте хотя бы одну ссылку.');
 
         const lists: Track[][] = [];
-        for (const url of clean) {
+        const resolved: string[] = [];
+        for (const raw of clean) {
           try {
-            lists.push(isProfileUrl(url) ? await fetchLikes(url) : await player.loadPlaylist(url));
+            let p = parseSoundCloudUrl(raw);
+            if (p?.short) p = parseSoundCloudUrl(await resolveShortUrl(raw));
+            if (!p) throw new Error('это не похоже на ссылку SoundCloud');
+
+            if (p.kind === 'playlist') {
+              lists.push(await player.loadPlaylist(p.url));
+            } else if (p.kind === 'profile' || p.kind === 'likes') {
+              lists.push(await fetchLikes(p.url));
+            } else if (p.kind === 'track') {
+              throw new Error(
+                'это ссылка на один трек. Добавьте её во вкладке «Список ссылок» либо вставьте ссылку на профиль или плейлист',
+              );
+            } else {
+              throw new Error(p.reason ?? 'такая ссылка не поддерживается');
+            }
+            resolved.push(p.url);
           } catch (e) {
-            throw new Error(`${labelOf(url)}: ${(e as Error).message}`);
+            throw new Error(`${labelOf(raw)}: ${(e as Error).message}`);
           }
         }
 
@@ -157,8 +177,8 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
             merged.push({ ...t, source: s });
             n++;
           }
-          if (!n) throw new Error(`${labelOf(clean[s])}: нет уникальных треков`);
-          stats.push({ label: labelOf(clean[s]), count: n });
+          if (!n) throw new Error(`${labelOf(resolved[s])}: нет уникальных треков`);
+          stats.push({ label: labelOf(resolved[s]), count: n });
         });
 
         setPlaylist(merged);
@@ -172,16 +192,21 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     [player],
   );
 
-  const loadFromLinks = useCallback((text: string) => {
-    const tracks = parseLinks(text).map((t) => ({ ...t, source: 0 }));
-    if (!tracks.length) {
-      setLoadError('Не нашёл ни одной ссылки на трек SoundCloud.');
-      return;
-    }
+  const loadFromLinks = useCallback(async (text: string) => {
     setLoadError(null);
-    localStorage.setItem('savedLinks', text);
-    setPlaylist(tracks);
-    setSources([{ label: 'Список ссылок', count: tracks.length }]);
+    setIsLoadingPlaylist(true);
+    try {
+      const tracks = (await parseLinks(text)).map((t) => ({ ...t, source: 0 }));
+      if (!tracks.length) {
+        setLoadError('Не нашёл ни одной ссылки на трек SoundCloud.');
+        return;
+      }
+      localStorage.setItem('savedLinks', text);
+      setPlaylist(tracks);
+      setSources([{ label: 'Список ссылок', count: tracks.length }]);
+    } finally {
+      setIsLoadingPlaylist(false);
+    }
   }, []);
 
   const startGame = useCallback(

@@ -108,6 +108,30 @@ app.get('/api/likes', async (req, res) => {
   }
 });
 
+// Раскрывает короткие ссылки (on.soundcloud.com/...): идёт по редиректам и возвращает итоговый адрес.
+// Разрешены только известные короткие домены SoundCloud.
+const SHORT_HOSTS = new Set(['on.soundcloud.com', 'soundcloud.app.goo.gl', 'snd.sc', 'www.snd.sc']);
+
+app.get('/api/resolve', async (req, res) => {
+  try {
+    const raw = String(req.query.url ?? '').trim();
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    if (!SHORT_HOSTS.has(u.hostname.toLowerCase())) {
+      return res.status(400).json({ error: 'Это не короткая ссылка SoundCloud' });
+    }
+    const r = await fetch(u, { redirect: 'follow', headers: { 'user-agent': UA } });
+    const finalUrl = r.url;
+    await r.body?.cancel();
+    if (!finalUrl || finalUrl === u.href) {
+      return res.status(502).json({ error: 'Короткая ссылка не раскрылась' });
+    }
+    res.json({ url: finalUrl });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ error: 'Не удалось раскрыть короткую ссылку' });
+  }
+});
+
 /* ---------- Комнаты (WebSocket-ретранслятор) ---------- */
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024 });
