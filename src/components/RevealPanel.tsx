@@ -1,4 +1,6 @@
 import type { RoundRecord } from '../types/game';
+import Icon, { type IconName } from './Icon';
+import Cover from './Cover';
 
 interface Props {
   record: RoundRecord;
@@ -19,11 +21,23 @@ export default function RevealPanel({ record, playerNames, isLast, onNext }: Pro
           : 'Время фрагмента вышло — никто не угадал'
         : 'Трек пропущен';
 
+  const kind = ok ? 'ok' : result.kind === 'skipped' ? 'skip' : 'bad';
+  const icon: IconName = ok ? 'check-circle' : result.kind === 'skipped' ? 'skip' : 'x-circle';
+
   return (
     <div className={`reveal glass-inner ${ok ? 'ok' : 'bad'}`}>
-      <div className="verdict">{ok ? '✅' : result.kind === 'skipped' ? '⏭' : '❌'} {verdict}</div>
-      <div className="reveal-title">{track.title || 'Название недоступно'}</div>
-      {track.artist && <div className="muted">{track.artist}</div>}
+      <div className={`verdict ${kind}`}>
+        <Icon name={icon} size={22} />
+        {verdict}
+      </div>
+
+      <div className="reveal-main">
+        <Cover src={track.artwork} size="lg" />
+        <div className="reveal-text">
+          <div className="reveal-title">{track.title || 'Название недоступно'}</div>
+          {track.artist && <div className="muted">{track.artist}</div>}
+        </div>
+      </div>
 
       {attempts.length > 0 && (
         <ul className="attempts">
@@ -40,7 +54,8 @@ export default function RevealPanel({ record, playerNames, isLast, onNext }: Pro
         <a className="btn btn-ghost" href={track.url} target="_blank" rel="noreferrer">Открыть в SoundCloud</a>
         {onNext && (
           <button className="btn btn-primary" onClick={onNext}>
-            {isLast ? 'К итогам' : 'Дальше ▶'}
+            {isLast ? 'К итогам' : 'Дальше'}
+            <Icon name="arrow-right" size={16} />
           </button>
         )}
       </div>

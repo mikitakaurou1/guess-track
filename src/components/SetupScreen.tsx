@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GameConfig, Track } from '../types/game';
 import type { HostRoom } from '../hooks/useRoom';
 import type { SourceStat } from '../hooks/useGame';
+import Icon from './Icon';
 
 interface Props {
   ready: boolean;
@@ -37,7 +38,7 @@ export default function SetupScreen({
 
   const load = () => {
     const filled = urls.map((u) => u.trim()).filter(Boolean);
-    if (!filled.length || filled.some((u) => !/soundcloud\.com\//.test(u))) {
+    if (!filled.length || filled.some((u) => !/(soundcloud\.com|soundcloud\.app\.goo\.gl|snd\.sc)\//.test(u))) {
       setLocalError('Вставьте ссылки на профили или плейлисты SoundCloud.');
       return;
     }
@@ -74,12 +75,16 @@ export default function SetupScreen({
                   placeholder="soundcloud.com/username или ссылка на плейлист"
                 />
                 {urls.length > 1 && (
-                  <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>✕</button>
+                  <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>
+                    <Icon name="x" size={16} />
+                  </button>
                 )}
               </div>
             ))}
             {urls.length < 5 && (
-              <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>+ Добавить источник</button>
+              <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>
+                <Icon name="plus" size={16} /> Добавить источник
+              </button>
             )}
             <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
               {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить' : 'Подключаем SoundCloud...'}
@@ -110,7 +115,9 @@ export default function SetupScreen({
         )}
 
         {(localError || error) && <div className="error">{localError || error}</div>}
-        <button className="btn btn-ghost btn-lg" onClick={onJoinMode}>У меня есть код комнаты →</button>
+        <button className="btn btn-ghost btn-lg" onClick={onJoinMode}>
+          У меня есть код комнаты <Icon name="arrow-right" size={16} />
+        </button>
       </section>
     );
   }
@@ -181,8 +188,12 @@ export default function SetupScreen({
           </ul>
         )}
         <div className="seg">
-          <button className={randomOrder ? 'on' : ''} onClick={() => setRandomOrder(true)}>🎲 Случайные</button>
-          <button className={!randomOrder ? 'on' : ''} onClick={() => setRandomOrder(false)}>📋 По порядку</button>
+          <button className={randomOrder ? 'on' : ''} onClick={() => setRandomOrder(true)}>
+            <Icon name="shuffle" size={16} /> Случайные
+          </button>
+          <button className={!randomOrder ? 'on' : ''} onClick={() => setRandomOrder(false)}>
+            <Icon name="list" size={16} /> По порядку
+          </button>
         </div>
       </div>
 
@@ -224,7 +235,7 @@ export default function SetupScreen({
         {!room.code ? (
           <>
             <button className="btn btn-ghost" onClick={room.open} disabled={room.connecting}>
-              {room.connecting ? 'Создаём комнату...' : '🌐 Создать комнату'}
+              <Icon name="globe" size={16} /> {room.connecting ? 'Создаём комнату...' : 'Создать комнату'}
             </button>
             {room.error && <div className="error">{room.error}</div>}
           </>
@@ -239,7 +250,9 @@ export default function SetupScreen({
             <ul className="attempts">
               {guests.length === 0 && <li className="no">Пока никто не подключился</li>}
               {guests.map((g) => (
-                <li key={g.id} className="yes">📱 {g.name}</li>
+                <li key={g.id} className="yes">
+                  <Icon name="phone" size={14} /> {g.name}
+                </li>
               ))}
             </ul>
             <button className="btn btn-ghost" onClick={room.close}>Закрыть комнату</button>
@@ -248,7 +261,7 @@ export default function SetupScreen({
       </div>
 
       <button className="btn btn-primary btn-lg" onClick={start} disabled={!playersOk}>
-        Начать игру ▶ ({totalPlayers} {totalPlayers === 1 ? 'игрок' : 'игроков'})
+        Начать игру ({totalPlayers} {totalPlayers === 1 ? 'игрок' : 'игроков'}) <Icon name="play" size={16} />
       </button>
       {!playersOk && <p className="muted small">Нужно от 1 до 5 игроков суммарно (сейчас {totalPlayers}).</p>}
     </section>

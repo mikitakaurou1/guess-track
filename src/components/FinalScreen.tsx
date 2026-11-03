@@ -1,5 +1,6 @@
 import type { RoundRecord } from '../types/game';
 import TrackResultCard from './TrackResultCard';
+import Icon from './Icon';
 
 interface Props {
   names: string[];
@@ -7,8 +8,6 @@ interface Props {
   history: RoundRecord[];
   onRestart?: () => void;
 }
-
-const MEDALS = ['🥇', '🥈', '🥉'];
 
 export default function FinalScreen({ names, scores, history, onRestart }: Props) {
   const rows = names
@@ -24,7 +23,9 @@ export default function FinalScreen({ names, scores, history, onRestart }: Props
         <div className="leaderboard">
           {rows.map((r, pos) => (
             <div key={r.i} className={`lb-row ${pos === 0 ? 'first' : ''}`}>
-              <span className="lb-pos">{MEDALS[pos] ?? pos + 1}</span>
+              <span className="lb-pos">
+                {pos < 3 ? <Icon name="medal" size={26} className={`m${pos}`} /> : pos + 1}
+              </span>
               <span className={`avatar c${r.i}`}>{r.name.slice(0, 1).toUpperCase()}</span>
               <span className="lb-name">{r.name}</span>
               <b className="lb-score">{r.score}</b>

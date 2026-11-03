@@ -4,6 +4,7 @@ import { useGuestAudio } from '../hooks/useGuestAudio';
 import type { SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import JoinScreen from './JoinScreen';
 import GuestScreen from './GuestScreen';
+import Icon from './Icon';
 
 interface Props {
   player: SoundCloudPlayer | null;
@@ -54,7 +55,7 @@ export default function GuestApp({ player, initialCode, onBack }: Props) {
   if (!g.snapshot) {
     return (
       <section className='glass center-text'>
-        <h2>Подключено ✅</h2>
+        <h2>Подключено <Icon name='check-circle' size={24} className='ic-ok' /></h2>
         <p className='muted'>Получаем состояние игры...</p>
       </section>
     );

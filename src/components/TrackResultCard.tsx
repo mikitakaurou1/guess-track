@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { RoundRecord } from '../types/game';
+import Icon from './Icon';
+import Cover from './Cover';
 
 interface Props {
   index: number;
@@ -13,11 +15,19 @@ export default function TrackResultCard({ index, record, playerNames }: Props) {
 
   const ok = result.kind === 'correct';
   const badge =
-    result.kind === 'correct'
-      ? `✅ ${playerNames[result.playerIndex]}`
-      : result.kind === 'nobody'
-        ? '❌ Никто не угадал'
-        : '⏭ Пропущен';
+    result.kind === 'correct' ? (
+      <>
+        <Icon name="check" size={14} /> {playerNames[result.playerIndex]}
+      </>
+    ) : result.kind === 'nobody' ? (
+      <>
+        <Icon name="x" size={14} /> Никто не угадал
+      </>
+    ) : (
+      <>
+        <Icon name="skip" size={14} /> Пропущен
+      </>
+    );
 
   const widgetSrc =
     'https://w.soundcloud.com/player/?url=' + encodeURIComponent(track.url) +
@@ -27,13 +37,18 @@ export default function TrackResultCard({ index, record, playerNames }: Props) {
     <div className={`track-card ${ok ? 'ok' : 'bad'}`}>
       <div className="track-head">
         <span className="track-num">{index + 1}</span>
+        <Cover src={track.artwork} size="sm" />
         <div className="track-info">
           <div className="track-title">{track.title || 'Название недоступно'}</div>
           <div className="muted small">{track.artist}</div>
         </div>
         <span className={`badge ${ok ? 'ok' : 'bad'}`}>{badge}</span>
         <button className="btn btn-ghost" onClick={() => setOpen((v) => !v)}>
-          {open ? 'Скрыть' : '▶ Слушать'}
+          {open ? 'Скрыть' : (
+            <>
+              <Icon name="play" size={14} /> Слушать
+            </>
+          )}
         </button>
       </div>
 

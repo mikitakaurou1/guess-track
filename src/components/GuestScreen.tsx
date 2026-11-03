@@ -6,6 +6,7 @@ import RevealPanel from './RevealPanel';
 import FinalScreen from './FinalScreen';
 import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
+import Icon from './Icon';
 
 interface Props {
   snap: GuestSnapshot;
@@ -26,7 +27,7 @@ export default function GuestScreen({
   if (snap.phase === 'setup') {
     return (
       <section className='glass center-text'>
-        <h2>Вы в комнате ✅</h2>
+        <h2>Вы в комнате <Icon name='check-circle' size={24} className='ic-ok' /></h2>
         <p className='muted'>Ждём, пока хозяин начнёт игру...</p>
       </section>
     );
@@ -36,7 +37,7 @@ export default function GuestScreen({
     return <FinalScreen names={snap.names} scores={snap.scores} history={snap.history ?? []} />;
   }
 
-  const canBuzz = snap.phase === 'playing' || snap.phase === 'clipDone';
+  const canBuzz = snap.phase === 'playing';
   const myTurn = snap.phase === 'answering' && snap.current !== null && mine.includes(snap.current);
 
   let status = '';
@@ -44,8 +45,6 @@ export default function GuestScreen({
     status = snap.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
   } else if (snap.phase === 'playing') {
     status = 'Слушайте... кто первый нажмёт?';
-  } else if (snap.phase === 'clipDone') {
-    status = 'Фрагмент закончился — можно ещё попробовать';
   } else if (snap.phase === 'answering' && snap.current !== null) {
     status = myTurn ? 'Ваша очередь отвечать!' : `Отвечает: ${snap.names[snap.current]}`;
   }
@@ -60,7 +59,8 @@ export default function GuestScreen({
         </div>
         <div className='row'>
           <button className='btn btn-ghost' onClick={onToggleSound}>
-            {soundOn ? '🔊 Звук вкл' : '🔇 Звук выкл'}
+            <Icon name={soundOn ? 'volume' : 'mute'} size={16} />
+            {soundOn ? 'Звук вкл' : 'Звук выкл'}
           </button>
           {soundOn && (
             <button className='btn btn-ghost' onClick={onResync}>Нет звука?</button>
@@ -72,7 +72,7 @@ export default function GuestScreen({
 
       {soundOn && audioState === 'blocked' && (
         <div className='toast bad'>
-          🔇 Браузер не дал включить звук автоматически.
+          <Icon name='mute' size={16} /> Браузер не дал включить звук автоматически.
           <div className='row center'>
             <button className='btn btn-primary' onClick={onResync}>Включить звук</button>
           </div>
@@ -90,7 +90,7 @@ export default function GuestScreen({
 
       {la && snap.phase !== 'reveal' && (
         <div className='toast bad'>
-          ❌ <b>{snap.names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}
+          <Icon name='x-circle' size={16} /> <b>{snap.names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}
         </div>
       )}
 

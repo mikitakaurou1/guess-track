@@ -151,6 +151,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         artist: action.info.artist || old.artist,
         url: action.info.url || old.url,
         source: old.source,
+        artwork: action.info.artwork || old.artwork,
       };
       return { ...state, tracks };
     }

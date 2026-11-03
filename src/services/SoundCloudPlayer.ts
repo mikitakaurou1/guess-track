@@ -86,6 +86,7 @@ export class SoundCloudPlayer {
                     title: s.title ?? '',
                     artist: s.user?.username ?? '',
                     url: s.permalink_url ?? '',
+                    artwork: s.artwork_url || s.user?.avatar_url || undefined,
                   })),
                 );
               } else {
@@ -111,6 +112,7 @@ export class SoundCloudPlayer {
                 title: s.title ?? '',
                 artist: s.user?.username ?? '',
                 url: s.permalink_url ?? '',
+                artwork: s.artwork_url || s.user?.avatar_url || undefined,
               }
             : null,
         );

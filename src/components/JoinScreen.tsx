@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Icon from './Icon';
 
 interface Props {
   initialCode: string;
@@ -40,7 +41,9 @@ export default function JoinScreen({ initialCode, busy, error, onJoin, onBack }:
       <button className="btn btn-primary btn-lg" onClick={submit} disabled={busy || code.length < 4}>
         {busy ? 'Подключаемся...' : 'Подключиться'}
       </button>
-      <button className="btn btn-ghost btn-lg" onClick={onBack}>← Я хозяин игры</button>
+      <button className="btn btn-ghost btn-lg" onClick={onBack}>
+        <Icon name="arrow-left" size={16} /> Я хозяин игры
+      </button>
       {error && <div className="error">{error}</div>}
     </section>
   );

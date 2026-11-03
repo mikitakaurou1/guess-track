@@ -6,6 +6,7 @@ import AnswerPanel from './AnswerPanel';
 import RevealPanel from './RevealPanel';
 import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
+import Icon from './Icon';
 
 interface Props {
   state: GameState;
@@ -73,7 +74,7 @@ export default function GameScreen({
 
       {la && state.phase !== 'reveal' && (
         <div className="toast bad">
-          ❌ <b>{names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}.
+          <Icon name="x-circle" size={16} /> <b>{names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}.
           Право ответа у остальных!
         </div>
       )}
@@ -125,7 +126,9 @@ export default function GameScreen({
 
       {canBuzz && (
         <div className="row end">
-          <button className="btn btn-ghost" onClick={onSkip}>Пропустить трек ⏭</button>
+          <button className="btn btn-ghost" onClick={onSkip}>
+            <Icon name="skip" size={16} /> Пропустить трек
+          </button>
         </div>
       )}
     </section>

@@ -2,7 +2,8 @@ interface SCSound {
   id: number;
   title?: string;
   permalink_url?: string;
-  user?: { username?: string };
+  artwork_url?: string | null;
+  user?: { username?: string; avatar_url?: string };
 }
 
 interface SCWidget {

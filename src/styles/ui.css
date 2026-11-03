@@ -1,0 +1,52 @@
+/* Иконки */
+.icon { display: inline-block; flex: none; vertical-align: -0.2em; }
+button.btn, a.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+div.seg button { display: inline-flex; align-items: center; gap: 8px; }
+.glass h2 .icon { margin-left: 8px; vertical-align: -3px; }
+.ic-ok { color: var(--ok); }
+.badge { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Обложка */
+.cover {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.75);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(236, 72, 153, 0.28) 55%, rgba(34, 211, 238, 0.3));
+  border: 1px solid var(--glass-b);
+}
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover.lg {
+  width: 210px;
+  height: 210px;
+  border-radius: 22px;
+  box-shadow: 0 18px 50px rgba(139, 92, 246, 0.4);
+  animation: cover-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cover.sm { width: 48px; height: 48px; border-radius: 12px; }
+@keyframes cover-in {
+  from { opacity: 0; transform: scale(0.88) translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Карточка показа трека */
+.reveal-main { display: flex; align-items: center; gap: 22px; }
+.reveal-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.reveal .reveal-title { font-size: 28px; line-height: 1.15; word-break: break-word; }
+.reveal .verdict { display: flex; align-items: center; gap: 10px; }
+.reveal .verdict.ok .icon { color: var(--ok); }
+.reveal .verdict.bad .icon { color: var(--bad); }
+.reveal .verdict.skip .icon { color: var(--c); }
+
+/* Итоги */
+.lb-pos { display: grid; place-items: center; }
+.lb-pos .icon.m0 { color: #fbbf24; }
+.lb-pos .icon.m1 { color: #cbd5e1; }
+.lb-pos .icon.m2 { color: #d9894a; }
+
+@media (max-width: 600px) {
+  .reveal-main { flex-direction: column; text-align: center; }
+  .cover.lg { width: min(100%, 260px); height: auto; aspect-ratio: 1; }
+}

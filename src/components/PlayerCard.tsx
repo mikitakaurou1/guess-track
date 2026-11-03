@@ -1,3 +1,5 @@
+import Icon from './Icon';
+
 interface Props {
   name: string;
   index: number;
@@ -18,7 +20,13 @@ export default function PlayerCard({ name, index, score, active, locked, disable
         <span className={`avatar c${index}`}>{name.slice(0, 1).toUpperCase()}</span>
         <div>
           <div className="player-name">{name}</div>
-          <div className="muted small">{keyHint ?? (remote ? '📱 своё устройство' : '')}</div>
+          <div className="muted small">
+            {keyHint ?? (remote ? (
+              <>
+                <Icon name="phone" size={13} /> своё устройство
+              </>
+            ) : '')}
+          </div>
         </div>
         <div className="player-score">{score}</div>
       </div>
