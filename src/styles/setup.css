@@ -1,0 +1,4 @@
+.count-row { display: flex; align-items: center; gap: 16px; }
+.count-row .range { flex: 1; min-width: 0; margin: 0; }
+.count-row .input.count-input { flex: none; width: 88px; margin: 0; text-align: center; font-weight: 700; }
+.input.num-input { text-align: left; }

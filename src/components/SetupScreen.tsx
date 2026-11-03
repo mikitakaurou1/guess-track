@@ -4,6 +4,7 @@ import type { HostRoom } from '../hooks/useRoom';
 import type { SourceStat } from '../hooks/useGame';
 import Icon from './Icon';
 import '../styles/howto.css';
+import '../styles/setup.css';
 
 interface Props {
   ready: boolean;
@@ -18,6 +19,29 @@ interface Props {
   onJoinMode: () => void;
 }
 
+const toNum = (s: string, min: number, max: number, fallback: number) => {
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n));
+};
+
+// Текстовое поле для целого числа: без стрелок +1/−1, только цифры, при выходе из поля значение приводится к допустимому
+function NumberField({
+  value, onChange, min, max,
+}: { value: string; onChange: (v: string) => void; min: number; max: number }) {
+  return (
+    <input
+      className="input num-input"
+      type="text"
+      inputMode="numeric"
+      maxLength={3}
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+      onBlur={() => onChange(String(toNum(value, min, max, min)))}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+    />
+  );
+}
+
 export default function SetupScreen({
   ready, busy, error, playlist, sources, room,
   onLoadSources, onChangePlaylist, onStart, onJoinMode,
@@ -27,9 +51,10 @@ export default function SetupScreen({
 
   const [localCount, setLocalCount] = useState(1);
   const [names, setNames] = useState(['Игрок 1', 'Игрок 2', 'Игрок 3', 'Игрок 4', 'Игрок 5']);
-  const [clipSeconds, setClip] = useState(10);
-  const [answerSeconds, setAnswer] = useState(10);
+  const [clipText, setClipText] = useState('10');
+  const [answerText, setAnswerText] = useState('10');
   const [trackCount, setTrackCount] = useState(10);
+  const [countDraft, setCountDraft] = useState<string | null>(null);
   const [randomOrder, setRandomOrder] = useState(true);
 
   const total = playlist.length;
@@ -140,6 +165,13 @@ export default function SetupScreen({
   const perSource = Math.max(1, Math.min(Math.floor(trackCount / S), minCount));
   const tracks = perSource * S;
 
+  const commitCount = () => {
+    if (countDraft !== null && countDraft !== '') {
+      setTrackCount(Math.min(maxTotal, Math.max(S, parseInt(countDraft, 10))));
+    }
+    setCountDraft(null);
+  };
+
   const guests = room.guests;
   const totalPlayers = localCount + guests.length;
   const playersOk = totalPlayers >= 1 && totalPlayers <= 5;
@@ -150,8 +182,8 @@ export default function SetupScreen({
     onStart({
       playerNames: [...localNames, ...guests.map((g) => g.name)],
       owners: [...localNames.map(() => null), ...guests.map((g) => g.id)],
-      clipSeconds: Math.max(1, clipSeconds),
-      answerSeconds: Math.max(3, answerSeconds),
+      clipSeconds: toNum(clipText, 1, 60, 10),
+      answerSeconds: toNum(answerText, 3, 60, 10),
       trackCount: tracks,
       randomOrder,
     });
@@ -172,20 +204,52 @@ export default function SetupScreen({
           Треков в игре <b className="grad">{tracks}</b>{' '}
           <span className="muted">из {maxTotal}{S > 1 ? ` (по ${perSource} с каждого источника)` : ''}</span>
         </div>
-        <input
-          className="range"
-          type="range"
-          min={S}
-          max={maxTotal}
-          step={S}
-          value={tracks}
-          onChange={(e) => setTrackCount(+e.target.value)}
-        />
+        <div className="count-row">
+          <input
+            className="range"
+            type="range"
+            min={S}
+            max={maxTotal}
+            step={S}
+            value={tracks}
+            onChange={(e) => {
+              setCountDraft(null);
+              setTrackCount(+e.target.value);
+            }}
+          />
+          <input
+            className="input count-input"
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            aria-label="Количество треков"
+            value={countDraft ?? String(tracks)}
+            onChange={(e) => setCountDraft(e.target.value.replace(/\D/g, ''))}
+            onFocus={(e) => e.target.select()}
+            onBlur={commitCount}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          />
+        </div>
         <div className="chips">
           {[5, 10, 20, 30, 50].filter((n) => n % S === 0 && n < maxTotal).map((n) => (
-            <button key={n} className={`chip ${tracks === n ? 'on' : ''}`} onClick={() => setTrackCount(n)}>{n}</button>
+            <button
+              key={n}
+              className={`chip ${tracks === n ? 'on' : ''}`}
+              onClick={() => {
+                setCountDraft(null);
+                setTrackCount(n);
+              }}
+            >
+              {n}
+            </button>
           ))}
-          <button className={`chip ${tracks === maxTotal ? 'on' : ''}`} onClick={() => setTrackCount(maxTotal)}>
+          <button
+            className={`chip ${tracks === maxTotal ? 'on' : ''}`}
+            onClick={() => {
+              setCountDraft(null);
+              setTrackCount(maxTotal);
+            }}
+          >
             Максимум ({maxTotal})
           </button>
         </div>
@@ -211,11 +275,11 @@ export default function SetupScreen({
       <div className="grid-2">
         <div className="block">
           <div className="block-title">Секунд фрагмента</div>
-          <input className="input" type="number" min={1} max={60} value={clipSeconds} onChange={(e) => setClip(+e.target.value)} />
+          <NumberField value={clipText} onChange={setClipText} min={1} max={60} />
         </div>
         <div className="block">
           <div className="block-title">Секунд на ответ</div>
-          <input className="input" type="number" min={3} max={60} value={answerSeconds} onChange={(e) => setAnswer(+e.target.value)} />
+          <NumberField value={answerText} onChange={setAnswerText} min={3} max={60} />
         </div>
       </div>
 
