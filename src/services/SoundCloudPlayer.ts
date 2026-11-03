@@ -105,15 +105,13 @@ export class SoundCloudPlayer {
   }
 
   // undefined — запуск устарел (начали другой), null — трек не загрузился
+  // undefined — запуск устарел (начали другой), null — трек не загрузился
   async playTrack(track: Track): Promise<Track | null | undefined> {
     const myToken = ++this.token;
     this.ready = false;
     this.widget.pause();
 
-    const src =
-      track.id < 0 && track.url
-        ? track.url
-        : `https://api.soundcloud.com/tracks/${track.id}`;
+    const src = trackSrc(track);
 
     const loaded = await new Promise<boolean>((resolve) => {
       let done = false;
@@ -133,6 +131,7 @@ export class SoundCloudPlayer {
     const info = await this.getCurrent();
     if (myToken !== this.token) return undefined;
     if (!info) return null;
+    console.log('[playTrack]', { src, id: info.id, title: info.title });
 
     this.widget.seekTo(0);
     this.widget.play();
