@@ -9,8 +9,8 @@ header.logo h1 { font-size: 36px; }
 .logo:hover .logo-mark { transform: rotate(-4deg) scale(1.04); }
 
 /* Полосы эквалайзера легко «дышат» при наведении */
-.logo-mark .bar { transform-box: fill-box; transform-origin: center; }
-.logo:hover .logo-mark .bar { animation: logo-bar 0.8s ease-in-out infinite alternate; }
+.logo-mark .logo-eq-bar { transform-box: fill-box; transform-origin: center; }
+.logo:hover .logo-mark .logo-eq-bar { animation: logo-bar 0.8s ease-in-out infinite alternate; }
 @keyframes logo-bar {
   from { transform: scaleY(0.6); }
   to { transform: scaleY(1.15); }
@@ -21,6 +21,6 @@ header.logo h1 { font-size: 36px; }
   .logo-mark { width: 44px; height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .logo:hover .logo-mark .bar { animation: none; }
+  .logo:hover .logo-mark .logo-eq-bar { animation: none; }
   .logo:hover .logo-mark { transform: none; }
 }

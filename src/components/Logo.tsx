@@ -18,7 +18,7 @@ export default function Logo() {
         {BARS.map((h, i) => (
           <rect
             key={i}
-            className='bar'
+            className='logo-eq-bar'
             x={18 + i * 13}
             y={48 - h / 2}
             width='8'
