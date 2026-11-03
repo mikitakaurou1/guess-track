@@ -8,6 +8,7 @@ export interface GuestInfo {
 // Всё, что хост отправляет гостям. Названий текущего трека здесь нет.
 export interface GuestSnapshot {
   phase: Phase;
+  audio: { key: string; src: string } | null;
   round: number;
   total: number;
   names: string[];
