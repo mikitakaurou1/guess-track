@@ -33,18 +33,20 @@ export default function App() {
 
   return (
     <>
-      <div className="bg-orb orb-1" />
-      <div className="bg-orb orb-2" />
-      <div className="bg-orb orb-3" />
-      <main className="wrap">
-        <header className="logo">
-          <span className="logo-icon">♪</span>
+      <div className='bg-orb orb-1' />
+      <div className='bg-orb orb-2' />
+      <div className='bg-orb orb-3' />
+      <main className='wrap'>
+        <header className='logo'>
+          <span className='logo-icon'>♪</span>
           <h1>Guess<span>Track</span></h1>
         </header>
 
         <HiddenPlayer ref={iframeRef} />
 
-        {mode === 'join' && <GuestApp initialCode={roomFromUrl()} onBack={() => setMode('host')} />}
+        {mode === 'join' && (
+          <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')} />
+        )}
 
         {mode === 'host' && (
           <>
@@ -89,7 +91,8 @@ export default function App() {
             )}
           </>
         )}
-                <p className="muted small center-text">сборка: {__BUILD_TIME__}</p>
+
+        <p className='muted small center-text'>сборка: {__BUILD_TIME__}</p>
       </main>
     </>
   );

@@ -22,4 +22,5 @@ export interface GuestSnapshot {
   reveal: RoundRecord | null;
   history: RoundRecord[] | null;
   failStreak: number;
+  audio: { key: string; src: string } | null;
 }

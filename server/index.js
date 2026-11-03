@@ -6,7 +6,7 @@ const PORT = process.env.PORT ?? 3001;
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-/* ---------- Лайки SoundCloud (как раньше) ---------- */
+/* ---------- Лайки SoundCloud ---------- */
 let clientId = null;
 
 async function fetchClientId() {
@@ -21,12 +21,12 @@ async function fetchClientId() {
       /* запасной вариант ниже */
     }
   }
-  const scripts = [...html.matchAll(/<script[^>]+src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)]
+  const scripts = [...html.matchAll(/<script[^>]+src=.(https:\/\/a-v2\.sndcdn\.com\/assets\/[^'>\s]+\.js)/g)]
     .map((x) => x[1])
     .reverse();
   for (const src of scripts) {
     const js = await (await fetch(src, { headers: { 'user-agent': UA } })).text();
-    const c = js.match(/client_id[:=]\s*"([a-zA-Z0-9]{32})"/);
+    const c = js.match(/client_id[:=]\s*.([a-zA-Z0-9]{32})/);
     if (c) return c[1];
   }
   throw new Error('Не удалось получить client_id SoundCloud');
@@ -74,6 +74,13 @@ async function fetchAllLikes(userId) {
 }
 
 const app = express();
+
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? '*';
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 app.get('/api/likes', async (req, res) => {
   try {

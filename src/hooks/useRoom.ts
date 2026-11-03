@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GuestInfo, GuestSnapshot } from '../types/room';
+import { API_BASE } from '../config';
 
-const wsUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+const wsUrl = () =>
+  API_BASE
+    ? `${API_BASE.replace(/^http/, 'ws')}/ws`
+    : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
 /* ---------- Хост ---------- */
 export function useHostRoom(onGuestMessage: (guestId: string, data: any) => void) {

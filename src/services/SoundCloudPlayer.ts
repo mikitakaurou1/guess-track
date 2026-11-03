@@ -2,6 +2,9 @@ import type { Track } from '../types/game';
 
 export const LOAD_TIMEOUT_MS = 10_000;
 
+export const trackSrc = (t: { id: number; url: string }) =>
+  t.id < 0 && t.url ? t.url : `https://api.soundcloud.com/tracks/${t.id}`;
+
 const API_SRC = 'https://w.soundcloud.com/player/api.js';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -10,6 +13,7 @@ type ProgressListener = (positionMs: number) => void;
 export class SoundCloudPlayer {
   private widget: SCWidget;
   private listeners = new Set<ProgressListener>();
+  private playListeners = new Set<() => void>();
   private ready = false; // игнорируем «старые» события прогресса при смене трека
   private token = 0; // защита от одновременных загрузок треков
 
@@ -18,6 +22,7 @@ export class SoundCloudPlayer {
     this.widget.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
       if (this.ready) this.listeners.forEach((l) => l(e.currentPosition));
     });
+    this.widget.bind(SC.Widget.Events.PLAY, () => this.playListeners.forEach((l) => l()));
   }
 
   static loadApi(): Promise<void> {
@@ -34,6 +39,11 @@ export class SoundCloudPlayer {
   onProgress(listener: ProgressListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  onPlay(listener: () => void): () => void {
+    this.playListeners.add(listener);
+    return () => this.playListeners.delete(listener);
   }
 
   loadPlaylist(url: string): Promise<Track[]> {
@@ -54,15 +64,12 @@ export class SoundCloudPlayer {
               const len = list?.length ?? 0;
               if (len > 0 && (len === last || tries >= 6)) {
                 clearTimeout(timeout);
-
-                // убираем дубликаты по id
                 const seen = new Set<number>();
                 const unique = list.filter((s) => {
                   if (seen.has(s.id)) return false;
                   seen.add(s.id);
                   return true;
                 });
-
                 resolve(
                   unique.map((s) => ({
                     id: s.id,
@@ -107,10 +114,7 @@ export class SoundCloudPlayer {
     this.ready = false;
     this.widget.pause();
 
-    const src =
-      track.id < 0 && track.url
-        ? track.url
-        : `https://api.soundcloud.com/tracks/${track.id}`;
+    const src = trackSrc(track);
 
     const loaded = await new Promise<boolean>((resolve) => {
       let done = false;
@@ -136,6 +140,30 @@ export class SoundCloudPlayer {
     await sleep(400);
     if (myToken === this.token) this.ready = true;
     return info;
+  }
+
+  // Для гостей: загрузить трек без запуска
+  async loadOnly(src: string): Promise<boolean> {
+    const myToken = ++this.token;
+    this.ready = false;
+    this.widget.pause();
+    const ok = await new Promise<boolean>((resolve) => {
+      let done = false;
+      const finish = (v: boolean) => {
+        if (!done) {
+          done = true;
+          resolve(v);
+        }
+      };
+      setTimeout(() => finish(false), LOAD_TIMEOUT_MS);
+      this.widget.load(src, { auto_play: false, visual: false, callback: () => finish(true) });
+    });
+    return ok && myToken === this.token;
+  }
+
+  playFromStart(): void {
+    this.widget.seekTo(0);
+    this.widget.play();
   }
 
   playFull(): void {

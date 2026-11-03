@@ -1,4 +1,5 @@
 import type { GuestSnapshot } from '../types/room';
+import type { AudioState } from '../hooks/useGuestAudio';
 import PlayerCard from './PlayerCard';
 import AnswerPanel from './AnswerPanel';
 import RevealPanel from './RevealPanel';
@@ -9,18 +10,24 @@ import Equalizer from './Equalizer';
 interface Props {
   snap: GuestSnapshot;
   myId: string;
+  soundOn: boolean;
+  audioState: AudioState;
+  onToggleSound: () => void;
+  onResync: () => void;
   onBuzz: (player: number) => void;
   onAnswer: (text: string) => void;
 }
 
-export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
+export default function GuestScreen({
+  snap, myId, soundOn, audioState, onToggleSound, onResync, onBuzz, onAnswer,
+}: Props) {
   const mine = snap.owners.map((o, i) => (o === myId ? i : -1)).filter((i) => i >= 0);
 
   if (snap.phase === 'setup') {
     return (
-      <section className="glass center-text">
+      <section className='glass center-text'>
         <h2>Вы в комнате ✅</h2>
-        <p className="muted">Ждём, пока хозяин начнёт игру...</p>
+        <p className='muted'>Ждём, пока хозяин начнёт игру...</p>
       </section>
     );
   }
@@ -33,32 +40,61 @@ export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
   const myTurn = snap.phase === 'answering' && snap.current !== null && mine.includes(snap.current);
 
   let status = '';
-  if (snap.phase === 'loading') status = snap.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
-  else if (snap.phase === 'playing') status = 'Слушайте... кто первый нажмёт?';
-  else if (snap.phase === 'clipDone') status = 'Фрагмент закончился — можно ещё попробовать';
-  else if (snap.phase === 'answering' && snap.current !== null) {
+  if (snap.phase === 'loading') {
+    status = snap.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
+  } else if (snap.phase === 'playing') {
+    status = 'Слушайте... кто первый нажмёт?';
+  } else if (snap.phase === 'clipDone') {
+    status = 'Фрагмент закончился — можно ещё попробовать';
+  } else if (snap.phase === 'answering' && snap.current !== null) {
     status = myTurn ? 'Ваша очередь отвечать!' : `Отвечает: ${snap.names[snap.current]}`;
   }
 
   const la = snap.lastAttempt;
 
   return (
-    <section className="glass">
-      <div className="round-info">
-        Трек <b className="grad">{snap.round + 1}</b> / {snap.total}
+    <section className='glass'>
+      <div className='row between'>
+        <div className='round-info'>
+          Трек <b className='grad'>{snap.round + 1}</b> / {snap.total}
+        </div>
+        <div className='row'>
+          <button className='btn btn-ghost' onClick={onToggleSound}>
+            {soundOn ? '🔊 Звук вкл' : '🔇 Звук выкл'}
+          </button>
+          {soundOn && (
+            <button className='btn btn-ghost' onClick={onResync}>Нет звука?</button>
+          )}
+        </div>
       </div>
 
+      <div className='muted small'>Звук: {audioState}</div>
+
+      {soundOn && audioState === 'blocked' && (
+        <div className='toast bad'>
+          🔇 Браузер не дал включить звук автоматически.
+          <div className='row center'>
+            <button className='btn btn-primary' onClick={onResync}>Включить звук</button>
+          </div>
+        </div>
+      )}
+      {soundOn && audioState === 'failed' && (
+        <div className='toast bad'>
+          Не удалось загрузить этот трек на вашем устройстве (возможно, он недоступен в вашей стране).
+        </div>
+      )}
+
       <Equalizer active={snap.phase === 'playing' || snap.phase === 'reveal'} />
-      <div className="status">{status}</div>
+      <div className='status'>{status}</div>
       {snap.phase !== 'reveal' && <ProgressBar fraction={snap.clipLeft} />}
 
       {la && snap.phase !== 'reveal' && (
-        <div className="toast bad">
+        <div className='toast bad'>
           ❌ <b>{snap.names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}
         </div>
       )}
 
-      <div className="players">
+      <div className='players'>
         {snap.names.map((name, i) => (
           <PlayerCard
             key={i}
@@ -86,7 +122,9 @@ export default function GuestScreen({ snap, myId, onBuzz, onAnswer }: Props) {
         />
       )}
 
-      {snap.phase === 'reveal' && snap.reveal && <RevealPanel record={snap.reveal} playerNames={snap.names} />}
+      {snap.phase === 'reveal' && snap.reveal && (
+        <RevealPanel record={snap.reveal} playerNames={snap.names} />
+      )}
     </section>
   );
 }
