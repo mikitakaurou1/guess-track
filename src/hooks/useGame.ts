@@ -5,9 +5,16 @@ import { fetchLikes, isProfileUrl } from '../services/likesApi';
 import { parseLinks } from '../services/linksImport';
 import type { GameConfig, Track } from '../types/game';
 
+const GUEST_WAIT_MS = 4000; // сколько хост ждёт, пока гости подготовят трек
+const START_TIMEOUT_MS = 6000; // сколько ждём первого прогресса после запуска
+
 export interface SourceStat {
   label: string;
   count: number;
+}
+
+export interface GameNet {
+  send: (obj: unknown) => void;
 }
 
 function labelOf(url: string): string {
@@ -16,7 +23,7 @@ function labelOf(url: string): string {
   return m[2] ? `${m[1]}/${m[2]}` : m[1];
 }
 
-export function useGame(player: SoundCloudPlayer | null) {
+export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
   const [state, dispatch] = useReducer(gameReducer, initialState);
   const [playlist, setPlaylist] = useState<Track[]>([]);
   const [sources, setSources] = useState<SourceStat[]>([]);
@@ -27,8 +34,24 @@ export function useGame(player: SoundCloudPlayer | null) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const prevPhase = useRef(state.phase);
+  const readyRef = useRef(new Map<string, Set<string>>()); // ключ раунда -> гости, готовые к старту
 
   const track = selectCurrentTrack(state);
+
+  // Ждём, пока все удалённые игроки подготовят трек (или истечёт таймаут)
+  const waitForGuests = (key: string, maxMs: number) =>
+    new Promise<void>((resolve) => {
+      const t0 = Date.now();
+      const tick = () => {
+        const owners = stateRef.current.config?.owners ?? [];
+        const need = new Set(owners.filter((o): o is string => o !== null));
+        const have = readyRef.current.get(key);
+        const all = [...need].every((id) => have?.has(id));
+        if (all || Date.now() - t0 > maxMs) resolve();
+        else setTimeout(tick, 50);
+      };
+      tick();
+    });
 
   // Прогресс воспроизведения
   useEffect(() => {
@@ -46,23 +69,49 @@ export function useGame(player: SoundCloudPlayer | null) {
     });
   }, [player]);
 
-  // Старт раунда + сторожевой таймер
+  // Начало раунда: подготовка трека -> ожидание гостей -> одновременный старт
   useEffect(() => {
     if (state.phase !== 'loading' || !player || !state.order.length || state.stalled) return;
 
     const attempt = state.attempt;
     const trackIndex = state.order[state.round];
+    const key = `${state.round}:${trackIndex}`;
+    const remote = (state.config?.owners ?? []).some((o) => o !== null);
+    let cancelled = false;
     setPositionMs(0);
 
-    const watchdog = setTimeout(() => dispatch({ type: 'TRACK_FAILED', attempt }), LOAD_TIMEOUT_MS);
+    const fail = () => dispatch({ type: 'TRACK_FAILED', attempt });
+    const wdLoad = setTimeout(fail, LOAD_TIMEOUT_MS);
+    let wdStart: ReturnType<typeof setTimeout> | undefined;
 
-    player.playTrack(state.tracks[trackIndex]).then((info) => {
-      if (info === undefined) return;
-      if (info === null) dispatch({ type: 'TRACK_FAILED', attempt });
-      else dispatch({ type: 'TRACK_INFO', trackIndex, info });
-    });
+    (async () => {
+      const info = await player.prepareTrack(state.tracks[trackIndex], remote);
+      if (cancelled || info === undefined) return;
+      if (info === null) {
+        fail();
+        return;
+      }
+      clearTimeout(wdLoad);
+      dispatch({ type: 'TRACK_INFO', trackIndex, info });
 
-    return () => clearTimeout(watchdog);
+      if (remote) await waitForGuests(key, GUEST_WAIT_MS);
+      if (cancelled) return;
+
+      net?.send({ t: 'broadcast', data: { k: 'go', key } }); // гости стартуют одновременно с хостом
+      const started = await player.startPrepared();
+      if (cancelled) return;
+      if (!started) {
+        fail();
+        return;
+      }
+      wdStart = setTimeout(fail, START_TIMEOUT_MS);
+    })();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(wdLoad);
+      if (wdStart) clearTimeout(wdStart);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, state.attempt, state.stalled, player]);
 
@@ -136,7 +185,10 @@ export function useGame(player: SoundCloudPlayer | null) {
   }, []);
 
   const startGame = useCallback(
-    (config: GameConfig) => dispatch({ type: 'START', config, tracks: playlist }),
+    (config: GameConfig) => {
+      readyRef.current.clear();
+      dispatch({ type: 'START', config, tracks: playlist });
+    },
     [playlist],
   );
 
@@ -155,6 +207,12 @@ export function useGame(player: SoundCloudPlayer | null) {
       if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) {
         dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200) });
       }
+    } else if (data?.k === 'ready') {
+      // гость подготовил трек и готов стартовать
+      const key = String(data.key);
+      const set = readyRef.current.get(key) ?? new Set<string>();
+      set.add(guestId);
+      readyRef.current.set(key, set);
     }
   }, []);
 

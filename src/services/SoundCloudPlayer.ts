@@ -7,6 +7,7 @@ export const trackSrc = (t: { id: number; url: string }) =>
 
 const API_SRC = 'https://w.soundcloud.com/player/api.js';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 type ProgressListener = (positionMs: number) => void;
 
@@ -16,13 +17,22 @@ export class SoundCloudPlayer {
   private playListeners = new Set<() => void>();
   private ready = false; // игнорируем «старые» события прогресса при смене трека
   private token = 0; // защита от одновременных загрузок треков
+  private preparedToken = -1;
+  private warming = false;
+  private warmResolve: (() => void) | null = null;
 
   constructor(iframe: HTMLIFrameElement) {
     this.widget = SC.Widget(iframe);
     this.widget.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
       if (this.ready) this.listeners.forEach((l) => l(e.currentPosition));
     });
-    this.widget.bind(SC.Widget.Events.PLAY, () => this.playListeners.forEach((l) => l()));
+    this.widget.bind(SC.Widget.Events.PLAY, () => {
+      if (this.warming) {
+        this.warmResolve?.();
+        return;
+      }
+      this.playListeners.forEach((l) => l());
+    });
   }
 
   static loadApi(): Promise<void> {
@@ -108,15 +118,8 @@ export class SoundCloudPlayer {
     });
   }
 
-  // undefined — запуск устарел (начали другой), null — трек не загрузился
-  async playTrack(track: Track): Promise<Track | null | undefined> {
-    const myToken = ++this.token;
-    this.ready = false;
-    this.widget.pause();
-
-    const src = trackSrc(track);
-
-    const loaded = await new Promise<boolean>((resolve) => {
+  private loadSrc(src: string): Promise<boolean> {
+    return new Promise((resolve) => {
       let done = false;
       const finish = (ok: boolean) => {
         if (!done) {
@@ -125,9 +128,44 @@ export class SoundCloudPlayer {
         }
       };
       setTimeout(() => finish(false), LOAD_TIMEOUT_MS);
-      this.widget.bind(SC.Widget.Events.ERROR, () => finish(false));
       this.widget.load(src, { auto_play: false, visual: false, callback: () => finish(true) });
     });
+  }
+
+  private setVolume(v: number): void {
+    (this.widget as unknown as { setVolume: (n: number) => void }).setVolume(v);
+  }
+
+  // «Прогрев»: беззвучно запускаем трек, чтобы браузер заранее загрузил поток.
+  // Тогда настоящий старт происходит почти мгновенно. На iOS громкость не работает — пропускаем.
+  private async warmUp(): Promise<void> {
+    if (isIOS) return;
+    this.warming = true;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => resolve(), 2000);
+      this.warmResolve = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      this.setVolume(0);
+      this.widget.play();
+    });
+    this.warmResolve = null;
+    await sleep(300); // даём буферу набраться
+    this.widget.pause();
+    this.widget.seekTo(0);
+    this.setVolume(100);
+    this.warming = false;
+  }
+
+  // Хост, шаг 1: загрузить трек (и прогреть). Без запуска звука.
+  // undefined — запуск устарел, null — трек не загрузился
+  async prepareTrack(track: Track, warm: boolean): Promise<Track | null | undefined> {
+    const myToken = ++this.token;
+    this.ready = false;
+    this.widget.pause();
+
+    const loaded = await this.loadSrc(trackSrc(track));
     if (myToken !== this.token) return undefined;
     if (!loaded) return null;
 
@@ -135,30 +173,34 @@ export class SoundCloudPlayer {
     if (myToken !== this.token) return undefined;
     if (!info) return null;
 
-    this.widget.seekTo(0);
-    this.widget.play();
-    await sleep(400);
-    if (myToken === this.token) this.ready = true;
+    if (warm) await this.warmUp();
+    if (myToken !== this.token) return undefined;
+
+    this.preparedToken = myToken;
     return info;
   }
 
-  // Для гостей: загрузить трек без запуска
-  async loadOnly(src: string): Promise<boolean> {
+  // Хост, шаг 2: запустить подготовленный трек
+  async startPrepared(): Promise<boolean> {
+    const myToken = this.token;
+    if (this.preparedToken !== myToken) return false;
+    this.widget.seekTo(0);
+    this.widget.play();
+    await sleep(400);
+    if (myToken !== this.token) return false;
+    this.ready = true;
+    return true;
+  }
+
+  // Гость: загрузить трек без запуска (с прогревом)
+  async loadOnly(src: string, warm = false): Promise<boolean> {
     const myToken = ++this.token;
     this.ready = false;
     this.widget.pause();
-    const ok = await new Promise<boolean>((resolve) => {
-      let done = false;
-      const finish = (v: boolean) => {
-        if (!done) {
-          done = true;
-          resolve(v);
-        }
-      };
-      setTimeout(() => finish(false), LOAD_TIMEOUT_MS);
-      this.widget.load(src, { auto_play: false, visual: false, callback: () => finish(true) });
-    });
-    return ok && myToken === this.token;
+    const ok = await this.loadSrc(src);
+    if (!ok || myToken !== this.token) return false;
+    if (warm) await this.warmUp();
+    return myToken === this.token;
   }
 
   playFromStart(): void {

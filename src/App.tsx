@@ -14,8 +14,13 @@ const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUp
 export default function App() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { player, error } = useSoundCloud(iframeRef);
-  const game = useGame(player);
+
+  // useGame нужен room.send для сигнала «старт», а room нужен game.handleRemote — связываем через ref
+  const sendRef = useRef<(obj: unknown) => void>(() => {});
+  const game = useGame(player, { send: (obj) => sendRef.current(obj) });
   const room = useHostRoom(game.handleRemote);
+  sendRef.current = room.send;
+
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const { state } = game;
 

@@ -14,7 +14,13 @@ interface Props {
 export default function GuestApp({ player, initialCode, onBack }: Props) {
   const g = useGuestRoom();
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem('guestSound') !== 'off');
-  const { resync, audioState } = useGuestAudio(player, g.snapshot, soundOn && g.status === 'joined');
+  const { resync, audioState } = useGuestAudio(
+    player,
+    g.snapshot,
+    soundOn && g.status === 'joined',
+    g.go,
+    (key) => g.send({ k: 'ready', key }),
+  );
 
   const toggleSound = () => {
     setSoundOn((v) => {

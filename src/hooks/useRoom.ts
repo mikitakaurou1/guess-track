@@ -68,6 +68,7 @@ export function useGuestRoom() {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'joined' | 'closed'>('idle');
   const [myId, setMyId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<GuestSnapshot | null>(null);
+  const [go, setGo] = useState<{ key: string; n: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const join = useCallback((code: string, name: string) => {
@@ -84,7 +85,9 @@ export function useGuestRoom() {
         setMyId(m.id);
         setStatus('joined');
       } else if (m.t === 'host_msg') {
-        setSnapshot(m.data);
+        // сигнал «старт» от хоста — отдельно от состояния игры
+        if (m.data?.k === 'go') setGo({ key: String(m.data.key), n: Date.now() });
+        else setSnapshot(m.data);
       } else if (m.t === 'room_closed') {
         setStatus('closed');
       } else if (m.t === 'error') {
@@ -109,9 +112,10 @@ export function useGuestRoom() {
     wsRef.current?.close();
     setStatus('idle');
     setSnapshot(null);
+    setGo(null);
   }, []);
 
   useEffect(() => () => wsRef.current?.close(), []);
 
-  return { status, myId, snapshot, error, join, send, leave };
+  return { status, myId, snapshot, go, error, join, send, leave };
 }
