@@ -1,36 +1,73 @@
-const COLLAB = new Set(['x', 'х', '×', 'feat', 'feat.', 'ft', 'ft.', 'featuring', 'w/', 'vs', 'vs.', 'prod', 'prod.']);
+const COLLAB = new Set(['x', '\u0445', '\u00d7', 'feat', 'feat.', 'ft', 'ft.', 'featuring', 'w/', 'vs', 'vs.', 'prod', 'prod.']);
 
-// Сколько опечаток допускается (по длине названия). Верните 0, чтобы опечатки не прощались совсем.
+// Кириллические буквы, неотличимые от латинских, приводим к латинским.
+// Так «папа» с латинскими a в названии трека и обычный ответ «папа» считаются одним и тем же.
+const SHAPE: Record<string, string> = {
+  '\u0430': 'a',
+  '\u0441': 'c',
+  '\u0435': 'e',
+  '\u043e': 'o',
+  '\u0440': 'p',
+  '\u0445': 'x',
+  '\u0443': 'y',
+  '\u043a': 'k',
+  '\u043c': 'm',
+  '\u0442': 't',
+  '\u043d': 'h',
+  '\u0432': 'b',
+};
+
+// Цифры внутри слов, похожие на буквы: Dha6y -> dhaby
+const LEET: Record<string, string> = {
+  '0': 'o',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '6': 'b',
+  '7': 't',
+  '8': 'b',
+  '9': 'g',
+};
+
+// Допустимое число опечаток по длине названия (с учётом пробелов). Верните 0, чтобы опечатки не прощались.
 function typoBudget(len: number): number {
-  if (len < 9) return 0;
-  if (len < 16) return 1;
-  return 2;
+  if (len < 7) return 0;
+  if (len < 11) return 1;
+  if (len < 16) return 2;
+  return 3;
 }
 
+// Приводим строку к «скелету»: без регистра, диакритики (й, ё), невидимых символов и знаков
 function squash(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const base = s.toLowerCase().normalize('NFKD').replace(/[\p{M}\p{Cf}]/gu, '');
+  return base
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .map((tok) => {
+      const shaped = [...tok].map((ch) => SHAPE[ch] ?? ch).join('');
+      return /\p{L}/u.test(shaped) ? [...shaped].map((ch) => LEET[ch] ?? ch).join('') : shaped;
+    })
+    .join(' ');
 }
 
 function stripBrackets(s: string): string {
   return s.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ');
 }
 
-function splitDash(s: string): string[] {
-  return s.split(' - ').flatMap((p) => p.split(' – ')).flatMap((p) => p.split(' — '));
+function splitParts(s: string): string[] {
+  let parts = [s];
+  for (const sep of [' - ', ' \u2013 ', ' \u2014 ', ' | ', ' \u2022 ']) {
+    parts = parts.flatMap((p) => p.split(sep));
+  }
+  return parts;
 }
 
-// «LIPSTICK x 9mice» -> «LIPSTICK», «Название w/ Кто-то» -> «Название»
+// «LIPSTICK x 9mice» -> «LIPSTICK», «ПАПА +tewiq, ...» -> «ПАПА», «Название w/ Кто-то» -> «Название»
 function cutCollab(raw: string): string {
   const tokens = raw.trim().split(' ').filter(Boolean);
   for (let i = 1; i < tokens.length; i++) {
-    if (COLLAB.has(tokens[i].toLowerCase())) return tokens.slice(0, i).join(' ');
+    const low = tokens[i].toLowerCase();
+    if (COLLAB.has(low) || low.startsWith('+')) return tokens.slice(0, i).join(' ');
   }
   return raw;
 }
@@ -38,7 +75,7 @@ function cutCollab(raw: string): string {
 function candidates(title: string): Set<string> {
   const base = stripBrackets(title);
   const raws = [base];
-  const parts = splitDash(base).map((p) => p.trim()).filter(Boolean);
+  const parts = splitParts(base).map((p) => p.trim()).filter(Boolean);
   if (parts.length > 1) raws.push(...parts, parts.slice(1).join(' - '));
 
   const out = new Set<string>();
@@ -75,10 +112,10 @@ export function isCorrectAnswer(answer: string, title: string): boolean {
   if (!a) return false;
 
   for (const t of candidates(title)) {
-    // 1. точное совпадение (без учёта регистра, знаков и «x Артист» / «feat.» / «w/»)
+    // 1. точное совпадение «скелетов» (без регистра, знаков, «x Артист» / «+ Артист» / «feat.» / «w/»)
     if (t === a) return true;
 
-    // 2. опечатки — только в длинных названиях и с той же первой буквой
+    // 2. небольшие опечатки в длинных названиях с той же первой буквой
     const budget = typoBudget(t.length);
     if (
       budget > 0 &&
