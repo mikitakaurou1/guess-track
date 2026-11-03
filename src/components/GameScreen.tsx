@@ -18,6 +18,9 @@ interface Props {
   onNext: () => void;
   onFinish: () => void;
   onRetry: () => void;
+  soundOn: boolean;
+  onToggleSound: () => void;
+  onResync: () => void;
 }
 
 export default function GameScreen({
