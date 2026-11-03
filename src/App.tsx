@@ -89,6 +89,7 @@ export default function App() {
             )}
           </>
         )}
+                <p className="muted small center-text">сборка: {__BUILD_TIME__}</p>
       </main>
     </>
   );
