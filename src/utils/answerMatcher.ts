@@ -73,15 +73,20 @@ function cutCollab(raw: string): string {
 }
 
 function candidates(title: string): Set<string> {
-  const base = stripBrackets(title);
-  const raws = [base];
-  const parts = splitParts(base).map((p) => p.trim()).filter(Boolean);
-  if (parts.length > 1) raws.push(...parts, parts.slice(1).join(' - '));
+  // Текст в скобках может быть как частью ответа, так и нет («Джанк 2 (нужен)» и «Джанк 2»):
+  // пробуем оба варианта — без скобок вообще и с содержимым скобок как обычными словами
+  const bases = [stripBrackets(title), title.replace(/[()\[\]]/g, ' ')];
 
   const out = new Set<string>();
-  for (const r of raws) {
-    out.add(squash(r));
-    out.add(squash(cutCollab(r)));
+  for (const base of bases) {
+    const raws = [base];
+    const parts = splitParts(base).map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 1) raws.push(...parts, parts.slice(1).join(' - '));
+
+    for (const r of raws) {
+      out.add(squash(r));
+      out.add(squash(cutCollab(r)));
+    }
   }
   out.delete('');
   if (!out.size) out.add(title.trim().toLowerCase());
