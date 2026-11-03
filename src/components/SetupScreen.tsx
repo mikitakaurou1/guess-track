@@ -1,0 +1,256 @@
+import { useState } from 'react';
+import type { GameConfig, Track } from '../types/game';
+import type { HostRoom } from '../hooks/useRoom';
+import type { SourceStat } from '../hooks/useGame';
+
+interface Props {
+  ready: boolean;
+  busy: boolean;
+  error: string | null;
+  playlist: Track[];
+  sources: SourceStat[];
+  room: HostRoom;
+  onLoadSources: (urls: string[]) => void;
+  onLoadLinks: (text: string) => void;
+  onChangePlaylist: () => void;
+  onStart: (config: GameConfig) => void;
+  onJoinMode: () => void;
+}
+
+export default function SetupScreen({
+  ready, busy, error, playlist, sources, room,
+  onLoadSources, onLoadLinks, onChangePlaylist, onStart, onJoinMode,
+}: Props) {
+  const [mode, setMode] = useState<'sources' | 'links'>('sources');
+  const [urls, setUrls] = useState<string[]>(['']);
+  const [linksText, setLinksText] = useState(() => localStorage.getItem('savedLinks') ?? '');
+  const [localError, setLocalError] = useState('');
+
+  const [localCount, setLocalCount] = useState(1);
+  const [names, setNames] = useState(['Игрок 1', 'Игрок 2', 'Игрок 3', 'Игрок 4', 'Игрок 5']);
+  const [clipSeconds, setClip] = useState(10);
+  const [answerSeconds, setAnswer] = useState(10);
+  const [trackCount, setTrackCount] = useState(10);
+  const [randomOrder, setRandomOrder] = useState(true);
+
+  const total = playlist.length;
+
+  const load = () => {
+    const filled = urls.map((u) => u.trim()).filter(Boolean);
+    if (!filled.length || filled.some((u) => !/soundcloud\.com\//.test(u))) {
+      setLocalError('Вставьте ссылки на профили или плейлисты SoundCloud.');
+      return;
+    }
+    setLocalError('');
+    onLoadSources(filled);
+  };
+
+  // ---------- Шаг 1: источники ----------
+  if (!total) {
+    return (
+      <section className="glass">
+        <div className="step">Шаг 1 из 2</div>
+        <h2>Откуда брать треки</h2>
+
+        <div className="seg">
+          <button className={mode === 'sources' ? 'on' : ''} onClick={() => setMode('sources')}>Профили / плейлисты</button>
+          <button className={mode === 'links' ? 'on' : ''} onClick={() => setMode('links')}>Список ссылок</button>
+        </div>
+
+        {mode === 'sources' ? (
+          <>
+            <p className="muted">
+              Ссылка на профиль (возьмём лайки) или на публичный плейлист. Если источников несколько,
+              в игре будет поровну треков от каждого.
+            </p>
+            {urls.map((u, i) => (
+              <div key={i} className="name-field">
+                <span className={`avatar c${i}`}>{i + 1}</span>
+                <input
+                  className="input"
+                  value={u}
+                  onChange={(e) => setUrls((p) => p.map((x, k) => (k === i ? e.target.value : x)))}
+                  onKeyDown={(e) => e.key === 'Enter' && load()}
+                  placeholder="soundcloud.com/username или ссылка на плейлист"
+                />
+                {urls.length > 1 && (
+                  <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>✕</button>
+                )}
+              </div>
+            ))}
+            {urls.length < 5 && (
+              <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>+ Добавить источник</button>
+            )}
+            <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
+              {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить' : 'Подключаем SoundCloud...'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted">Ссылки на треки по одной в строке или файл likes.txt.</p>
+            <textarea
+              className="input"
+              rows={8}
+              value={linksText}
+              onChange={(e) => setLinksText(e.target.value)}
+              placeholder="https://soundcloud.com/artist/track"
+            />
+            <input
+              type="file"
+              accept=".txt"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (f) setLinksText(await f.text());
+              }}
+            />
+            <button className="btn btn-primary btn-lg" onClick={() => onLoadLinks(linksText)} disabled={!ready}>
+              Использовать список
+            </button>
+          </>
+        )}
+
+        {(localError || error) && <div className="error">{localError || error}</div>}
+        <button className="btn btn-ghost btn-lg" onClick={onJoinMode}>У меня есть код комнаты →</button>
+      </section>
+    );
+  }
+
+  // ---------- Шаг 2: параметры ----------
+  const S = Math.max(1, sources.length);
+  const minCount = Math.min(...sources.map((s) => s.count));
+  const maxTotal = S * minCount;
+  const perSource = Math.max(1, Math.min(Math.floor(trackCount / S), minCount));
+  const tracks = perSource * S;
+
+  const guests = room.guests;
+  const totalPlayers = localCount + guests.length;
+  const playersOk = totalPlayers >= 1 && totalPlayers <= 5;
+  const joinLink = room.code ? `${location.origin}/?room=${room.code}` : '';
+
+  const start = () => {
+    const localNames = names.slice(0, localCount).map((n, i) => n.trim() || `Игрок ${i + 1}`);
+    onStart({
+      playerNames: [...localNames, ...guests.map((g) => g.name)],
+      owners: [...localNames.map(() => null), ...guests.map((g) => g.id)],
+      clipSeconds: Math.max(1, clipSeconds),
+      answerSeconds: Math.max(3, answerSeconds),
+      trackCount: tracks,
+      randomOrder,
+    });
+  };
+
+  return (
+    <section className="glass">
+      <div className="row between">
+        <div>
+          <div className="step">Шаг 2 из 2</div>
+          <h2>Настройте игру</h2>
+        </div>
+        <button className="btn btn-ghost" onClick={onChangePlaylist}>Другие источники</button>
+      </div>
+
+      <div className="block">
+        <div className="block-title">
+          Треков в игре <b className="grad">{tracks}</b>{' '}
+          <span className="muted">из {maxTotal}{S > 1 ? ` (по ${perSource} с каждого источника)` : ''}</span>
+        </div>
+        <input
+          className="range"
+          type="range"
+          min={S}
+          max={maxTotal}
+          step={S}
+          value={tracks}
+          onChange={(e) => setTrackCount(+e.target.value)}
+        />
+        <div className="chips">
+          {[5, 10, 20, 30, 50].filter((n) => n % S === 0 && n < maxTotal).map((n) => (
+            <button key={n} className={`chip ${tracks === n ? 'on' : ''}`} onClick={() => setTrackCount(n)}>{n}</button>
+          ))}
+          <button className={`chip ${tracks === maxTotal ? 'on' : ''}`} onClick={() => setTrackCount(maxTotal)}>
+            Максимум ({maxTotal})
+          </button>
+        </div>
+        {S > 1 && (
+          <ul className="attempts">
+            {sources.map((s, i) => (
+              <li key={i} className="yes">
+                <b>{s.label}</b>: {s.count} треков в пуле → в игре {perSource}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="seg">
+          <button className={randomOrder ? 'on' : ''} onClick={() => setRandomOrder(true)}>🎲 Случайные</button>
+          <button className={!randomOrder ? 'on' : ''} onClick={() => setRandomOrder(false)}>📋 По порядку</button>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <div className="block">
+          <div className="block-title">Секунд фрагмента</div>
+          <input className="input" type="number" min={1} max={60} value={clipSeconds} onChange={(e) => setClip(+e.target.value)} />
+        </div>
+        <div className="block">
+          <div className="block-title">Секунд на ответ</div>
+          <input className="input" type="number" min={3} max={60} value={answerSeconds} onChange={(e) => setAnswer(+e.target.value)} />
+        </div>
+      </div>
+
+      <div className="block">
+        <div className="block-title">Игроков за этим устройством</div>
+        <div className="chips">
+          {[0, 1, 2, 3, 4, 5].map((n) => (
+            <button key={n} className={`chip ${localCount === n ? 'on' : ''}`} onClick={() => setLocalCount(n)}>{n}</button>
+          ))}
+        </div>
+        <div className="grid-names">
+          {names.slice(0, localCount).map((n, i) => (
+            <div key={i} className="name-field">
+              <span className={`avatar c${i}`}>{i + 1}</span>
+              <input
+                className="input"
+                value={n}
+                onChange={(e) => setNames((p) => p.map((x, k) => (k === i ? e.target.value : x)))}
+              />
+            </div>
+          ))}
+        </div>
+        {localCount > 0 && <p className="muted small">Клавиши быстрого ответа: 1–{localCount}.</p>}
+      </div>
+
+      <div className="block">
+        <div className="block-title">Игра по сети (со своих устройств)</div>
+        {!room.code ? (
+          <>
+            <button className="btn btn-ghost" onClick={room.open} disabled={room.connecting}>
+              {room.connecting ? 'Создаём комнату...' : '🌐 Создать комнату'}
+            </button>
+            {room.error && <div className="error">{room.error}</div>}
+          </>
+        ) : (
+          <div className="glass-inner">
+            <div className="muted small">Код комнаты</div>
+            <div className="room-code">{room.code}</div>
+            <div className="muted small">
+              Или ссылка: <a href={joinLink}>{joinLink}</a>{' '}
+              <button className="chip" onClick={() => navigator.clipboard.writeText(joinLink)}>Копировать</button>
+            </div>
+            <ul className="attempts">
+              {guests.length === 0 && <li className="no">Пока никто не подключился</li>}
+              {guests.map((g) => (
+                <li key={g.id} className="yes">📱 {g.name}</li>
+              ))}
+            </ul>
+            <button className="btn btn-ghost" onClick={room.close}>Закрыть комнату</button>
+          </div>
+        )}
+      </div>
+
+      <button className="btn btn-primary btn-lg" onClick={start} disabled={!playersOk}>
+        Начать игру ▶ ({totalPlayers} {totalPlayers === 1 ? 'игрок' : 'игроков'})
+      </button>
+      {!playersOk && <p className="muted small">Нужно от 1 до 5 игроков суммарно (сейчас {totalPlayers}).</p>}
+    </section>
+  );
+}
