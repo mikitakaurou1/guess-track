@@ -5,6 +5,7 @@ import GameScreen from './components/GameScreen';
 import FinalScreen from './components/FinalScreen';
 import GuestApp from './components/GuestApp';
 import Deco from './components/Deco';
+import Logo from './components/Logo';
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
@@ -44,10 +45,7 @@ export default function App() {
       <div className='bg-orb orb-3' />
       <Deco />
       <main className='wrap'>
-        <header className='logo'>
-          <span className='logo-icon'>♪</span>
-          <h1>Guess<span>Track</span></h1>
-        </header>
+        <Logo />
 
         <HiddenPlayer ref={iframeRef} />
 
