@@ -44,9 +44,7 @@ export default function App() {
 
         <HiddenPlayer ref={iframeRef} />
 
-        {mode === 'join' && (
-          <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')} />
-        )}
+        {mode === 'join' && <GuestApp initialCode={roomFromUrl()} onBack={() => setMode('host')} />}
 
         {mode === 'host' && (
           <>

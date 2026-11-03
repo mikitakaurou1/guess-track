@@ -75,13 +75,6 @@ async function fetchAllLikes(userId) {
 
 const app = express();
 
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? '*';
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
-
 app.get('/api/likes', async (req, res) => {
   try {
     const m = String(req.query.url ?? '').trim().match(/soundcloud\.com\/([^/?#]+)/i);

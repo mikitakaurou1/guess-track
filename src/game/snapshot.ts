@@ -1,7 +1,5 @@
 import type { GuestSnapshot } from '../types/room';
 import type { GameState } from './gameReducer';
-import { selectCurrentTrack } from './gameReducer';
-import { trackSrc } from '../services/SoundCloudPlayer';
 
 export function buildSnapshot(state: GameState, positionMs: number): GuestSnapshot {
   const c = state.config;
@@ -10,10 +8,6 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     : state.phase === 'clipDone' || state.phase === 'reveal'
       ? 0
       : Math.max(0, 1 - positionMs / (c.clipSeconds * 1000));
-
-  const track = selectCurrentTrack(state);
-  const hasAudio =
-    !!track && ['loading', 'playing', 'clipDone', 'answering', 'reveal'].includes(state.phase);
 
   return {
     phase: state.phase,
@@ -31,8 +25,5 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     reveal: state.phase === 'reveal' ? state.history[state.history.length - 1] ?? null : null,
     history: state.phase === 'final' ? state.history : null,
     failStreak: state.failStreak,
-    audio: hasAudio
-      ? { key: `${state.round}:${state.order[state.round]}`, src: trackSrc(track!) }
-      : null,
   };
 }
