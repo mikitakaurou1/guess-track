@@ -1,0 +1,27 @@
+.howto-title { font-weight: 700; }
+.howto-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.howto-list li { display: flex; gap: 12px; align-items: flex-start; line-height: 1.45; }
+.howto-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--grad);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: #fff;
+}
+.howto-list li > div > span { display: block; margin-top: 2px; font-size: 14px; color: var(--mut); }
+.howto code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  color: var(--txt);
+}
+.howto .howto-note { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--mut); line-height: 1.45; }
+.howto .howto-note .icon { margin-top: 2px; color: var(--bad); }
+.only-sc { color: var(--txt); }
+.only-sc b { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }

@@ -3,6 +3,7 @@ import type { GameConfig, Track } from '../types/game';
 import type { HostRoom } from '../hooks/useRoom';
 import type { SourceStat } from '../hooks/useGame';
 import Icon from './Icon';
+import '../styles/howto.css';
 
 interface Props {
   ready: boolean;
@@ -36,7 +37,7 @@ export default function SetupScreen({
   const load = () => {
     const filled = urls.map((u) => u.trim()).filter(Boolean);
     if (!filled.length || filled.some((u) => !/(soundcloud\.com|soundcloud\.app\.goo\.gl|snd\.sc)\//.test(u))) {
-      setLocalError('Вставьте ссылки на профили или плейлисты SoundCloud.');
+      setLocalError('Нужны ссылки именно с SoundCloud (soundcloud.com/… или on.soundcloud.com/…): на профиль или плейлист. Ссылки Spotify, YouTube и других сервисов не подходят.');
       return;
     }
     setLocalError('');
@@ -50,10 +51,54 @@ export default function SetupScreen({
         <div className="step">Шаг 1 из 2</div>
         <h2>Откуда брать треки</h2>
 
-        <p className="muted">
-          Ссылка на профиль (возьмём лайки) или на публичный плейлист. Если источников несколько,
-          в игре будет поровну треков от каждого.
+        <p className="only-sc">
+          Игра работает только с музыкой из <b>SoundCloud</b>. Вставьте ссылку на профиль или плейлист именно оттуда
+          (Spotify, YouTube, Яндекс Музыка и прочие не поддерживаются).
         </p>
+
+        <div className="howto glass-inner">
+          <div className="howto-title">Какую ссылку взять</div>
+          <ul className="howto-list">
+            <li>
+              <span className="howto-num">1</span>
+              <div>
+                <b>Профиль — возьмём все лайки человека</b>
+                <span>
+                  Откройте страницу профиля на soundcloud.com и скопируйте адрес из строки браузера, например{' '}
+                  <code>soundcloud.com/username</code>. У этого пользователя лайки должны быть открыты для всех.
+                </span>
+              </div>
+            </li>
+            <li>
+              <span className="howto-num">2</span>
+              <div>
+                <b>Плейлист или альбом — возьмём все его треки</b>
+                <span>
+                  Откройте плейлист, нажмите «Поделиться» → «Скопировать ссылку» (или возьмите адрес из строки браузера), например{' '}
+                  <code>soundcloud.com/username/sets/name</code>. Плейлист должен быть публичным или доступным по «секретной ссылке».
+                </span>
+              </div>
+            </li>
+            <li>
+              <span className="howto-num">3</span>
+              <div>
+                <b>С телефона, из приложения SoundCloud</b>
+                <span>
+                  Нажмите «Поделиться» → «Скопировать ссылку» на профиле или плейлисте. Короткие ссылки вида{' '}
+                  <code>on.soundcloud.com/…</code> тоже подходят.
+                </span>
+              </div>
+            </li>
+          </ul>
+          <div className="howto-note">
+            <Icon name="x-circle" size={16} />
+            <span>
+              Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до 5 источников: тогда в игре
+              будет поровну треков от каждого.
+            </span>
+          </div>
+        </div>
+
         {urls.map((u, i) => (
           <div key={i} className="name-field">
             <span className={`avatar c${i}`}>{i + 1}</span>
@@ -62,7 +107,7 @@ export default function SetupScreen({
               value={u}
               onChange={(e) => setUrls((p) => p.map((x, k) => (k === i ? e.target.value : x)))}
               onKeyDown={(e) => e.key === 'Enter' && load()}
-              placeholder="soundcloud.com/username или ссылка на плейлист"
+              placeholder="Вставьте ссылку SoundCloud: профиль или плейлист"
             />
             {urls.length > 1 && (
               <button className="btn btn-ghost" onClick={() => setUrls((p) => p.filter((_, k) => k !== i))}>
@@ -73,11 +118,11 @@ export default function SetupScreen({
         ))}
         {urls.length < 5 && (
           <button className="btn btn-ghost" onClick={() => setUrls((p) => [...p, ''])}>
-            <Icon name="plus" size={16} /> Добавить источник
+            <Icon name="plus" size={16} /> Добавить ещё один источник
           </button>
         )}
         <button className="btn btn-primary btn-lg" onClick={load} disabled={!ready || busy}>
-          {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить' : 'Подключаем SoundCloud...'}
+          {busy ? 'Загружаем (для 700+ лайков это до минуты)...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}
         </button>
 
         {(localError || error) && <div className="error">{localError || error}</div>}
