@@ -63,10 +63,12 @@ export class SoundCloudPlayer {
   unlock(): void {
     if (this.unlockingAudio) return;
     this.unlockingAudio = true;
+    const startedToken = this.token;
     this.setVolume(0);
     this.widget.play();
     setTimeout(() => {
-      this.widget.pause();
+      // Если затем уже началась загрузка трека (token изменился), паузу не ставим: она остановила бы уже запущенный трек
+      if (this.token === startedToken) this.widget.pause();
       this.setVolume(100);
       this.unlockingAudio = false;
     }, 400);
