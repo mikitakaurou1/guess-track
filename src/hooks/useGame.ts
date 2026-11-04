@@ -12,6 +12,9 @@ const TOUCH =
   (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
 export interface SourceStat { label: string; count: number; }
 export interface GameNet { send: (obj: unknown) => void; }
+// DEBUG-LOG: временный лог загрузки треков для показа в интерфейсе
+export interface LogEntry { id: number; time: string; kind: 'info' | 'ok' | 'fail'; text: string; }
+const trackLabel = (t?: Track) => (t ? `${t.artist ? t.artist + ' — ' : ''}${t.title || 'без названия'} (id ${t.id})` : '?'); // DEBUG-LOG
 type Preload = { round: number; trackIndex: number; ok: boolean; promise: Promise<Track | null | undefined> };
 function labelOf(raw: string): string {
   const p = parseSoundCloudUrl(raw); const prefix = 'https://soundcloud.com/';
@@ -28,6 +31,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
   const [soundBlocked, setSoundBlocked] = useState(false); // браузер не дал запустить звук сам
   const [preloadDone, setPreloadDone] = useState(true); // следующий трек уже загружен (или загрузка закончилась неудачей)
+  const [debugLog, setDebugLog] = useState<LogEntry[]>([]); // DEBUG-LOG
+  const logSeq = useRef(0); // DEBUG-LOG
+  const log = useCallback((kind: LogEntry['kind'], text: string) => setDebugLog(l => [...l.slice(-79), { id: ++logSeq.current, time: new Date().toLocaleTimeString('ru-RU'), kind, text }]), []); // DEBUG-LOG
   const stateRef = useRef(state); stateRef.current = state;
   const playersRef = useRef(players); playersRef.current = players;
   const preloadRef = useRef<Preload | null>(null); // следующий трек, уже загруженный во втором плеере
@@ -70,9 +76,12 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     if (pre && pre.round === nextRound && pre.trackIndex === nextIdx) return;
     const entry: Preload = { round: nextRound, trackIndex: nextIdx, ok: false, promise: Promise.resolve(undefined) };
     setPreloadDone(false);
+    const preLabel = trackLabel(state.tracks[nextIdx]); // DEBUG-LOG
+    log('info', `Предзагрузка: ${preLabel}`); // DEBUG-LOG
     entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false, true)
       .then(info => {
-        if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
+        if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); log('ok', `Предзагружен: ${preLabel}`); } // DEBUG-LOG
+        else if (info === null) log('fail', `Предзагрузка не удалась: ${preLabel} — трек не загрузился или плеер не вернул данные`); // DEBUG-LOG
         return info;
       })
       .finally(() => { if (preloadRef.current === entry) setPreloadDone(true); });
@@ -86,9 +95,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const player = players[state.round % 2];
     const attempt = state.attempt; const trackIndex = state.order[state.round]; const key = `${state.round}:${trackIndex}`;
     const remote = (state.config?.owners ?? []).some(o => o !== null);
+    const label = trackLabel(state.tracks[trackIndex]); // DEBUG-LOG
     let cancelled = false; setPositionMs(0); setSoundBlocked(false);
-    const fail = () => { tapStartRef.current = null; dispatch({ type: 'TRACK_FAILED', attempt }); };
-    const wdLoad = setTimeout(fail, LOAD_TIMEOUT_MS);
+    log('info', `Раунд ${state.round + 1}, попытка ${attempt}: грузим ${label}`); // DEBUG-LOG
+    const fail = (reason: string) => { tapStartRef.current = null; log('fail', `ПРОПУЩЕН: ${label} — ${reason}`); /* DEBUG-LOG */ dispatch({ type: 'TRACK_FAILED', attempt }); };
+    const wdLoad = setTimeout(() => fail('не загрузился за 10 секунд'), LOAD_TIMEOUT_MS);
     let wdStart: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       let info: Track | null | undefined;
@@ -99,8 +110,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       }
       if (!info) info = await player.prepareTrack(state.tracks[trackIndex], remote);
       if (cancelled || info === undefined) return;
-      if (info === null) { fail(); return; }
+      if (info === null) { fail('плеер не загрузил трек или не вернул его данные'); return; }
       clearTimeout(wdLoad); dispatch({ type: 'TRACK_INFO', trackIndex, info });
+      log('ok', `Загружен: ${label}`); // DEBUG-LOG
       const tapped = tapStartRef.current?.round === state.round && tapStartRef.current.trackIndex === trackIndex;
       if (!tapped) {
         if (remote) await waitForGuests(key, GUEST_WAIT_MS);
@@ -108,10 +120,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
         net?.send({ t: 'broadcast', data: { k: 'go', key } });
         const started = await player.startPrepared();
         if (cancelled) return;
-        if (!started) { fail(); return; }
+        if (!started) { fail('не удалось запустить'); return; }
+        log('info', `Запуск: ${label}`); // DEBUG-LOG
       }
       // Звук не пошёл: на телефоне это блокировка браузера, предлагаем нажать кнопку; на компьютере меняем трек
-      wdStart = setTimeout(() => { if (TOUCH) setSoundBlocked(true); else fail(); }, START_TIMEOUT_MS);
+      wdStart = setTimeout(() => { if (TOUCH) { log('fail', `Звук не пошёл (нужна кнопка «Включить звук»): ${label}`); /* DEBUG-LOG */ setSoundBlocked(true); } else fail('звук не пошёл за 6 секунд'); }, START_TIMEOUT_MS);
     })();
     return () => { cancelled = true; clearTimeout(wdLoad); if (wdStart) clearTimeout(wdStart); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,6 +218,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     else if (data?.k === 'ready') { const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set); }
   }, []);
   return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, nextBusy, loadSources,
+    debugLog, clearDebugLog: () => setDebugLog([]), // DEBUG-LOG
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
     answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT' }), []), skip: () => dispatch({ type: 'SKIP' }),
     next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true); dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
