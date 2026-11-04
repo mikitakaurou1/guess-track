@@ -31,7 +31,7 @@ export default function App() {
       {mode === 'join' && <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')}/>}
       {mode === 'host' && <>
         {state.phase === 'setup' && <SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); game.startGame(cfg); }} onJoinMode={() => setMode('join')}/>}
-        {state.phase !== 'setup' && state.phase !== 'final' && state.config && <GameScreen state={state} track={game.track} positionMs={game.positionMs} soundBlocked={game.soundBlocked} onEnableSound={game.enableSound} onBuzz={game.buzz} onSubmit={game.submitAnswer} onTimeout={game.answerTimeout} onSkip={game.skip} onNext={game.next} onFinish={game.finish} onRetry={() => { player?.unlock(); game.retry(); }}/>}
+        {state.phase !== 'setup' && state.phase !== 'final' && state.config && <GameScreen state={state} track={game.track} positionMs={game.positionMs} soundBlocked={game.soundBlocked} nextBusy={game.nextBusy} onEnableSound={game.enableSound} onBuzz={game.buzz} onSubmit={game.submitAnswer} onTimeout={game.answerTimeout} onSkip={game.skip} onNext={game.next} onFinish={game.finish} onRetry={() => { player?.unlock(); game.retry(); }}/>}
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={game.reset}/>}
       </>}
       <p className='muted small center-text'>разработчик: mikitakaurou</p>

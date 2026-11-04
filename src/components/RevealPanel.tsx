@@ -6,10 +6,11 @@ interface Props {
   record: RoundRecord;
   playerNames: string[];
   isLast?: boolean;
+  nextBusy?: boolean; // следующий трек ещё загружается
   onNext?: () => void; // у гостей кнопки «Дальше» нет
 }
 
-export default function RevealPanel({ record, playerNames, isLast, onNext }: Props) {
+export default function RevealPanel({ record, playerNames, isLast, nextBusy, onNext }: Props) {
   const { result, track, attempts } = record;
   const ok = result.kind === 'correct';
   const verdict =
@@ -53,9 +54,9 @@ export default function RevealPanel({ record, playerNames, isLast, onNext }: Pro
       <div className="row center">
         <a className="btn btn-ghost" href={track.url} target="_blank" rel="noreferrer">Открыть в SoundCloud</a>
         {onNext && (
-          <button className="btn btn-primary" onClick={onNext}>
-            {isLast ? 'К итогам' : 'Дальше'}
-            <Icon name="arrow-right" size={16} />
+          <button className="btn btn-primary" onClick={onNext} disabled={nextBusy}>
+            {nextBusy ? 'Загружаем следующий трек…' : isLast ? 'К итогам' : 'Дальше'}
+            {!nextBusy && <Icon name="arrow-right" size={16} />}
           </button>
         )}
       </div>

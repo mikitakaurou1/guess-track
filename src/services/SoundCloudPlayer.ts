@@ -122,9 +122,9 @@ export class SoundCloudPlayer {
     });
   }
 
-  private getCurrent(): Promise<Track | null> {
+  private getCurrent(timeoutMs = 1500): Promise<Track | null> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), 1500);
+      const timer = setTimeout(() => resolve(null), timeoutMs);
       this.widget.getCurrentSound((s) => {
         clearTimeout(timer);
         resolve(
@@ -183,8 +183,9 @@ export class SoundCloudPlayer {
   }
 
   // Хост, шаг 1: загрузить трек (и прогреть). Без запуска звука.
+  // lenient: если плеер загрузил трек, но не успел сообщить его данные, берём данные из списка (для предзагрузки).
   // undefined — запуск устарел, null — трек не загрузился
-  async prepareTrack(track: Track, warm: boolean): Promise<Track | null | undefined> {
+  async prepareTrack(track: Track, warm: boolean, lenient = false): Promise<Track | null | undefined> {
     const myToken = ++this.token;
     this.ready = false;
     this.widget.pause();
@@ -193,8 +194,9 @@ export class SoundCloudPlayer {
     if (myToken !== this.token) return undefined;
     if (!loaded) return null;
 
-    const info = await this.getCurrent();
+    let info = await this.getCurrent(lenient ? 4000 : 1500);
     if (myToken !== this.token) return undefined;
+    if (!info && lenient) info = { ...track };
     if (!info) return null;
 
     if (warm) await this.warmUp();

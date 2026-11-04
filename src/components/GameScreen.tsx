@@ -7,8 +7,8 @@ import RevealPanel from './RevealPanel';
 import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
 import Icon from './Icon';
-interface Props { state: GameState; track: Track | null; positionMs: number; soundBlocked: boolean; onEnableSound: () => void; onBuzz: (player: number) => void; onSubmit: (text: string) => void; onTimeout: () => void; onSkip: () => void; onNext: () => void; onFinish: () => void; onRetry: () => void; }
-export default function GameScreen({ state, positionMs, soundBlocked, onEnableSound, onBuzz, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry }: Props) {
+interface Props { state: GameState; track: Track | null; positionMs: number; soundBlocked: boolean; nextBusy: boolean; onEnableSound: () => void; onBuzz: (player: number) => void; onSubmit: (text: string) => void; onTimeout: () => void; onSkip: () => void; onNext: () => void; onFinish: () => void; onRetry: () => void; }
+export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, onEnableSound, onBuzz, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry }: Props) {
   const config = state.config!; const names = config.playerNames; const owners = config.owners ?? names.map(() => null);
   const canBuzz = state.phase === 'playing';
   useEffect(() => {
@@ -32,7 +32,7 @@ export default function GameScreen({ state, positionMs, soundBlocked, onEnableSo
     {state.stalled && <div className='toast bad'><b>Не удаётся запустить треки.</b> Несколько подряд не загрузились или браузер не дал включить звук. Нажмите «Повторить» — это нажатие разрешает звук на телефоне.<div className='row center'><button className='btn btn-primary' onClick={onRetry}>Повторить</button></div></div>}
     <div className='players'>{names.map((name, i) => <PlayerCard key={i} name={name} avatar={config.avatars?.[i]} index={i} score={state.scores[i]} active={state.current === i} locked={state.locked.includes(i)} remote={owners[i] !== null} keyHint={owners[i] !== null ? undefined : `клавиша ${i + 1}`} disabled={!canBuzz || state.locked.includes(i) || owners[i] !== null} onBuzz={() => onBuzz(i)}/>)}</div>
     {state.phase === 'answering' && state.current !== null && <AnswerPanel key={`${state.round}-${state.locked.length}`} playerName={names[state.current]} seconds={config.answerSeconds} remote={owners[state.current] !== null} onSubmit={onSubmit} onTimeout={onTimeout}/>}
-    {state.phase === 'reveal' && record && <RevealPanel record={record} playerNames={names} isLast={state.round + 1 >= total} onNext={onNext}/>}
+    {state.phase === 'reveal' && record && <RevealPanel record={record} playerNames={names} isLast={state.round + 1 >= total} nextBusy={nextBusy} onNext={onNext}/>}
     {canBuzz && <div className='row end'><button className='btn btn-ghost' onClick={onSkip}><Icon name='skip' size={16}/> Пропустить трек</button></div>}
   </section>;
 }

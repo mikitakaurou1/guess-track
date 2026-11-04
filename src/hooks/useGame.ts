@@ -27,6 +27,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
   const [soundBlocked, setSoundBlocked] = useState(false); // браузер не дал запустить звук сам
+  const [preloadDone, setPreloadDone] = useState(true); // следующий трек уже загружен (или загрузка закончилась неудачей)
   const stateRef = useRef(state); stateRef.current = state;
   const playersRef = useRef(players); playersRef.current = players;
   const preloadRef = useRef<Preload | null>(null); // следующий трек, уже загруженный во втором плеере
@@ -64,14 +65,17 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     if (!players || state.phase !== 'playing') return;
     const nextRound = state.round + 1;
     const nextIdx = state.order[nextRound];
-    if (nextIdx === undefined) return;
+    if (nextIdx === undefined) { setPreloadDone(true); return; }
     const pre = preloadRef.current;
     if (pre && pre.round === nextRound && pre.trackIndex === nextIdx) return;
     const entry: Preload = { round: nextRound, trackIndex: nextIdx, ok: false, promise: Promise.resolve(undefined) };
-    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false).then(info => {
-      if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
-      return info;
-    });
+    setPreloadDone(false);
+    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false, true)
+      .then(info => {
+        if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
+        return info;
+      })
+      .finally(() => { if (preloadRef.current === entry) setPreloadDone(true); });
     preloadRef.current = entry;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, players]);
@@ -142,6 +146,10 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     dispatch({ type: 'NEXT' });
   }, []);
 
+  // На телефоне кнопка «Дальше» ждёт, пока следующий трек загрузится: тогда нажатие гарантированно запускает готовый трек
+  const remoteGame = (state.config?.owners ?? []).some(o => o !== null);
+  const nextBusy = TOUCH && !remoteGame && state.phase === 'reveal' && !preloadDone && state.order[state.round + 1] !== undefined;
+
   useEffect(() => {
     if (!players) return;
     if (state.phase === 'final' || state.phase === 'setup') { players.forEach(p => p.pause()); return; }
@@ -185,7 +193,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     } catch (e) { setLoadError((e as Error).message); } finally { setIsLoadingPlaylist(false); }
   }, [first]);
   const startGame = useCallback((config: GameConfig) => {
-    readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null;
+    readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true);
     dispatch({ type: 'START', config, tracks: playlist });
   }, [playlist]);
   const buzz = useCallback((p: number) => dispatch({ type: 'BUZZ', player: p }), []);
@@ -196,9 +204,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     else if (data?.k === 'answer') { if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200) }); }
     else if (data?.k === 'ready') { const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set); }
   }, []);
-  return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, loadSources,
+  return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, nextBusy, loadSources,
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
     answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT' }), []), skip: () => dispatch({ type: 'SKIP' }),
-    next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
+    next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true); dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
   };
 }
