@@ -18,7 +18,14 @@ export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, 
     document.querySelector<HTMLInputElement>('.answer-form input')?.focus({ preventScroll: true });
   };
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if ((e.target as HTMLElement).tagName === 'INPUT') return; const n = parseInt(e.key, 10); if (n >= 1 && n <= names.length && owners[n - 1] === null) onBuzz(n - 1); };
+    const handler = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= names.length && owners[n - 1] === null) {
+        e.preventDefault(); // иначе браузер допишет эту цифру в только что получившее фокус поле ответа
+        onBuzz(n - 1);
+      }
+    };
     window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [names.length, owners, onBuzzRaw]);
