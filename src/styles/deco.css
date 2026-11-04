@@ -65,14 +65,14 @@
 }
 .deco-disc.r .spin { animation-direction: reverse; }
 
-/* Мягкие блики без шва: начало и конец прозрачные, переходы растянуты */
+/* Широкие слабые цветные пятна без границ, вращаются вместе с диском */
 .deco-disc .spin::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0%, rgba(139, 92, 246, 0.2) 14%, transparent 34%, transparent 54%, rgba(34, 211, 238, 0.14) 70%, transparent 90%, transparent 100%);
-  filter: blur(14px);
+  background: conic-gradient(from 0deg, transparent 0%, rgba(139, 92, 246, 0.12) 20%, transparent 45%, transparent 55%, rgba(34, 211, 238, 0.09) 75%, transparent 100%);
+  filter: blur(30px);
 }
 @keyframes disc-spin { to { transform: rotate(360deg); } }
 
@@ -110,11 +110,14 @@
   background: rgba(255, 255, 255, 0.7);
 }
 
+/* Неподвижный мягкий свет без границ */
 .deco-disc .sheen {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(from 20deg, rgba(255, 255, 255, 0.1), transparent 14%, transparent 50%, rgba(255, 255, 255, 0.08) 64%, transparent 78%);
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.07) 0%, transparent 60%),
+    radial-gradient(circle at center, transparent 62%, rgba(0, 0, 0, 0.28) 100%);
 }
 
 @media (max-width: 1000px) {
