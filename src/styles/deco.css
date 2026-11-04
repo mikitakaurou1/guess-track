@@ -10,7 +10,7 @@
   mask-image: radial-gradient(ellipse at center, #000 0%, transparent 72%);
 }
 
-/* Концентрические кольца за карточкой, как на пластинке */
+/* Концентрические кольца за карточкой */
 .bg-rings {
   position: fixed;
   left: 50%;
@@ -38,36 +38,81 @@
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.025); }
 }
 
-/* Две колонки эквалайзера по бокам (только на широких экранах) */
-.deco-bars {
+/* Виниловые пластинки по краям: наполовину за границей экрана, медленно вращаются */
+.deco-disc {
+  --d: clamp(380px, 36vw, 640px);
   position: fixed;
-  top: 0;
-  bottom: 0;
   z-index: -1;
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  width: var(--d);
+  height: var(--d);
+  margin-top: calc(var(--d) / -2);
+  border-radius: 50%;
 }
-.deco-bars.l { left: 3vw; }
-.deco-bars.r { right: 3vw; }
-.deco-bars span {
-  width: 4px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--c), var(--v) 55%, var(--p));
-  opacity: 0.32;
-  transform-origin: center;
-  animation: deco-eq 3.4s ease-in-out infinite alternate;
+.deco-disc.l { left: calc(var(--d) * -0.6); top: 64%; }
+.deco-disc.r { right: calc(var(--d) * -0.6); top: 36%; }
+
+.deco-disc .spin {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle at center, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 7px),
+    radial-gradient(circle at center, #15122a 0%, #0a0910 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 90px rgba(139, 92, 246, 0.2), inset 0 0 70px rgba(0, 0, 0, 0.6);
+  animation: disc-spin 56s linear infinite;
 }
-@keyframes deco-eq {
-  from { transform: scaleY(0.35); }
-  to { transform: scaleY(1); }
+.deco-disc.r .spin { animation-direction: reverse; }
+@keyframes disc-spin { to { transform: rotate(360deg); } }
+
+/* Этикетка в цветах сайта, с отверстием и меткой (по ней видно вращение) */
+.deco-disc .label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34%;
+  height: 34%;
+  margin: -17% 0 0 -17%;
+  border-radius: 50%;
+  background: var(--grad);
+  opacity: 0.85;
+}
+.deco-disc .label::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16%;
+  height: 16%;
+  margin: -8% 0 0 -8%;
+  border-radius: 50%;
+  background: #0a0910;
+}
+.deco-disc .label::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 8%;
+  height: 8%;
+  margin-left: -4%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
 }
 
-@media (max-width: 1100px) {
-  .deco-bars { display: none; }
+/* Неподвижный блик поверх пластинки */
+.deco-disc .sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 20deg, rgba(255, 255, 255, 0.1), transparent 14%, transparent 50%, rgba(255, 255, 255, 0.08) 64%, transparent 78%);
+}
+
+@media (max-width: 1000px) {
+  .deco-disc { display: none; }
   .bg-rings i:nth-child(4) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bg-rings i, .deco-bars span { animation: none; }
+  .bg-rings i, .deco-disc .spin { animation: none; }
 }

@@ -1,19 +1,17 @@
 import '../styles/deco.css';
 
-const HEIGHTS = [60, 110, 170, 240, 190, 130, 90, 50];
-
-function Bars({ side }: { side: 'l' | 'r' }) {
-  const hs = side === 'l' ? HEIGHTS : [...HEIGHTS].reverse();
+function Disc({ side }: { side: 'l' | 'r' }) {
   return (
-    <div className={`deco-bars ${side}`} aria-hidden='true'>
-      {hs.map((h, i) => (
-        <span key={i} style={{ height: h, animationDelay: `${-i * 0.45}s` }} />
-      ))}
+    <div className={`deco-disc ${side}`} aria-hidden='true'>
+      <div className='spin'>
+        <div className='label' />
+      </div>
+      <div className='sheen' />
     </div>
   );
 }
 
-// Лаконичный декор фона: точечная сетка, кольца-«пластинка» за карточкой и две колонки эквалайзера по бокам
+// Декор фона: точечная сетка, кольца за карточкой и две виниловые пластинки по краям
 export default function Deco() {
   return (
     <>
@@ -24,8 +22,8 @@ export default function Deco() {
         <i />
         <i />
       </div>
-      <Bars side='l' />
-      <Bars side='r' />
+      <Disc side='l' />
+      <Disc side='r' />
     </>
   );
 }
