@@ -9,19 +9,6 @@ const API_SRC = 'https://w.soundcloud.com/player/api.js';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-// Трек нельзя воспроизвести вне SoundCloud: заблокирован, запрещено встраивание, приватный или без названия (обычно удалённый)
-const isRestricted = (s: unknown): boolean => {
-  const x = s as Record<string, unknown>;
-  return (
-    x.streamable === false ||
-    x.access === 'blocked' ||
-    x.policy === 'BLOCK' ||
-    (typeof x.embeddable_by === 'string' && x.embeddable_by !== 'all') ||
-    x.sharing === 'private' ||
-    !x.title
-  );
-};
-
 type ProgressListener = (positionMs: number) => void;
 
 export class SoundCloudPlayer {
@@ -111,7 +98,7 @@ export class SoundCloudPlayer {
                 clearTimeout(timeout);
                 const seen = new Set<number>();
                 const unique = list.filter((s) => {
-                  if (seen.has(s.id) || isRestricted(s)) return false;
+                  if (seen.has(s.id)) return false;
                   seen.add(s.id);
                   return true;
                 });
