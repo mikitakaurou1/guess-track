@@ -24,8 +24,8 @@ export default function HiddenPlayer({
 }) {
   return (
     <>
-      <iframe ref={refA} title='soundcloud-a' allow='autoplay; encrypted-media' src={SRC} style={STYLE} />
-      <iframe ref={refB} title='soundcloud-b' allow='autoplay; encrypted-media' src={SRC} style={STYLE} />
+      <iframe ref={refA} title='soundcloud-a' allow='autoplay' src={SRC} style={STYLE} />
+      <iframe ref={refB} title='soundcloud-b' allow='autoplay' src={SRC} style={STYLE} />
     </>
   );
 }
