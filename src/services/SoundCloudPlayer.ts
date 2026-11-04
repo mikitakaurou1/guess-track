@@ -20,6 +20,7 @@ export class SoundCloudPlayer {
   private preparedToken = -1;
   private warming = false;
   private warmResolve: (() => void) | null = null;
+  private unlockingAudio = false;
 
   constructor(iframe: HTMLIFrameElement) {
     this.widget = SC.Widget(iframe);
@@ -31,6 +32,7 @@ export class SoundCloudPlayer {
         this.warmResolve?.();
         return;
       }
+      if (this.unlockingAudio) return;
       this.playListeners.forEach((l) => l());
     });
   }
@@ -54,6 +56,20 @@ export class SoundCloudPlayer {
   onPlay(listener: () => void): () => void {
     this.playListeners.add(listener);
     return () => this.playListeners.delete(listener);
+  }
+
+  // Вызывать прямо из обработчика нажатия (синхронно): на телефоне это даёт браузеру жест пользователя,
+  // после которого звук виджета можно запускать без новых нажатий. Работает только если в виджет уже что-то загружено.
+  unlock(): void {
+    if (this.unlockingAudio) return;
+    this.unlockingAudio = true;
+    this.setVolume(0);
+    this.widget.play();
+    setTimeout(() => {
+      this.widget.pause();
+      this.setVolume(100);
+      this.unlockingAudio = false;
+    }, 400);
   }
 
   loadPlaylist(url: string): Promise<Track[]> {

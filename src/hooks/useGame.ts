@@ -6,6 +6,10 @@ import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import type { GameConfig, Track } from '../types/game';
 const GUEST_WAIT_MS = 4000;
 const START_TIMEOUT_MS = 6000;
+// На телефонах и планшетах браузер может не дать запустить звук без нажатия пользователя
+const TOUCH =
+  typeof window !== 'undefined' &&
+  (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
 export interface SourceStat { label: string; count: number; }
 export interface GameNet { send: (obj: unknown) => void; }
 function labelOf(raw: string): string {
@@ -21,6 +25,8 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
   const [positionMs, setPositionMs] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const [soundBlocked, setSoundBlocked] = useState(false); // запасной вариант: браузер не дал запустить самый первый трек
+  const playedRef = useRef(false); // хотя бы один трек уже играл в этой сессии
   const stateRef = useRef(state); stateRef.current = state;
   const prevPhase = useRef(state.phase);
   const readyRef = useRef(new Map<string, Set<string>>());
@@ -35,6 +41,7 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
   useEffect(() => {
     if (!player) return;
     return player.onProgress(pos => {
+      playedRef.current = true;
       const s = stateRef.current;
       if (s.phase === 'loading') dispatch({ type: 'TRACK_STARTED' });
       if (s.phase === 'playing' || s.phase === 'loading') {
@@ -43,11 +50,12 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
       }
     });
   }, [player]);
+  useEffect(() => { if (state.phase !== 'loading') setSoundBlocked(false); }, [state.phase]);
   useEffect(() => {
     if (state.phase !== 'loading' || !player || !state.order.length || state.stalled) return;
     const attempt = state.attempt; const trackIndex = state.order[state.round]; const key = `${state.round}:${trackIndex}`;
     const remote = (state.config?.owners ?? []).some(o => o !== null);
-    let cancelled = false; setPositionMs(0);
+    let cancelled = false; setPositionMs(0); setSoundBlocked(false);
     const fail = () => dispatch({ type: 'TRACK_FAILED', attempt });
     const wdLoad = setTimeout(fail, LOAD_TIMEOUT_MS);
     let wdStart: ReturnType<typeof setTimeout> | undefined;
@@ -62,11 +70,22 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
       const started = await player.startPrepared();
       if (cancelled) return;
       if (!started) { fail(); return; }
-      wdStart = setTimeout(fail, START_TIMEOUT_MS);
+      // Звук не пошёл. Пока ни один трек не играл, на телефоне это блокировка браузера, а не сломанный трек.
+      wdStart = setTimeout(() => { if (TOUCH && !playedRef.current) setSoundBlocked(true); else fail(); }, START_TIMEOUT_MS);
     })();
     return () => { cancelled = true; clearTimeout(wdLoad); if (wdStart) clearTimeout(wdStart); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, state.attempt, state.stalled, player]);
+  const enableSound = useCallback(() => {
+    if (!player) return;
+    const attempt = stateRef.current.attempt;
+    setSoundBlocked(false);
+    void player.startPrepared();
+    setTimeout(() => {
+      const s = stateRef.current;
+      if (s.phase === 'loading' && s.attempt === attempt) dispatch({ type: 'TRACK_FAILED', attempt });
+    }, START_TIMEOUT_MS);
+  }, [player]);
   useEffect(() => {
     if (!player) return;
     const prev = prevPhase.current; prevPhase.current = state.phase;
@@ -114,7 +133,7 @@ export function useGame(player: SoundCloudPlayer | null, net?: GameNet) {
     else if (data?.k === 'answer') { if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200) }); }
     else if (data?.k === 'ready') { const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set); }
   }, []);
-  return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, loadSources,
+  return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, loadSources,
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
     answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT' }), []), skip: () => dispatch({ type: 'SKIP' }),
     next: () => dispatch({ type: 'NEXT' }), finish: () => dispatch({ type: 'FINISH' }), reset: () => dispatch({ type: 'RESET' }), retry: () => dispatch({ type: 'RETRY' }),
