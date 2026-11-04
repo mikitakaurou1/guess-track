@@ -72,6 +72,12 @@ export class SoundCloudPlayer {
     }, 400);
   }
 
+  // Остановить плеер и перестать слушать его прогресс (когда звук передан второму плееру)
+  detach(): void {
+    this.ready = false;
+    this.widget.pause();
+  }
+
   loadPlaylist(url: string): Promise<Track[]> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(

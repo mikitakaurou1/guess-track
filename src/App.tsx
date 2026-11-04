@@ -12,10 +12,11 @@ import { useHostRoom } from './hooks/useRoom';
 import { buildSnapshot } from './game/snapshot';
 const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
 export default function App() {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { player, error } = useSoundCloud(iframeRef);
+  const iframeA = useRef<HTMLIFrameElement>(null);
+  const iframeB = useRef<HTMLIFrameElement>(null);
+  const { players, player, error } = useSoundCloud([iframeA, iframeB]);
   const sendRef = useRef<(obj: unknown) => void>(() => {});
-  const game = useGame(player, { send: obj => sendRef.current(obj) });
+  const game = useGame(players, { send: obj => sendRef.current(obj) });
   const room = useHostRoom(game.handleRemote); sendRef.current = room.send;
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const { state } = game;
@@ -26,7 +27,7 @@ export default function App() {
   }, [room.code, room.guests, state, bucket]);
   useEffect(() => { if (room.code) room.send({ t: 'set_open', open: state.phase === 'setup' }); }, [room.code, state.phase, room.send]);
   return <><div className='bg-orb orb-1'/><div className='bg-orb orb-2'/><div className='bg-orb orb-3'/><Deco/>
-    <main className='wrap'><Logo/><HiddenPlayer ref={iframeRef}/>
+    <main className='wrap'><Logo/><HiddenPlayer refA={iframeA} refB={iframeB}/>
       {mode === 'join' && <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')}/>}
       {mode === 'host' && <>
         {state.phase === 'setup' && <SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); game.startGame(cfg); }} onJoinMode={() => setMode('join')}/>}
