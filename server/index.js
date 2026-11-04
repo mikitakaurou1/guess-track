@@ -52,6 +52,19 @@ async function v2(url) {
   throw new Error('SoundCloud отклонил запрос');
 }
 
+// Трек не подходит для игры, если его нельзя воспроизвести вне SoundCloud: заблокирован, запрещено встраивание,
+// нет потоков, приватный, не обработан или удалён
+function isPlayable(t) {
+  if (t.policy === 'BLOCK' || t.access === 'blocked') return false;
+  if (t.streamable === false) return false;
+  if (t.embeddable_by && t.embeddable_by !== 'all') return false;
+  if (t.sharing === 'private') return false;
+  if (t.state && t.state !== 'finished') return false;
+  if (Array.isArray(t.media?.transcodings) && t.media.transcodings.length === 0) return false;
+  if (!t.title) return false;
+  return true;
+}
+
 async function fetchAllLikes(userId) {
   let next = `https://api-v2.soundcloud.com/users/${userId}/track_likes?limit=200&linked_partitioning=1`;
   const tracks = [];
@@ -60,7 +73,7 @@ async function fetchAllLikes(userId) {
     for (const item of data.collection ?? []) {
       const t = item.track ?? item;
       if (!t?.id || t.kind === 'playlist') continue;
-      if (t.policy === 'BLOCK' || t.access === 'blocked') continue;
+      if (!isPlayable(t)) continue;
       tracks.push({
         id: t.id,
         title: t.title ?? '',
