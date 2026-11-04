@@ -15,8 +15,16 @@ export default function AnswerPanel({ playerName, seconds, remote, onSubmit, onT
   const inputRef = useRef<HTMLInputElement>(null);
   const left = useCountdown(seconds, onTimeout);
 
+  // Курсор в поле ответа; повторяем несколько раз, если фокус перехватил другой элемент (например, плеер)
   useEffect(() => {
-    if (!remote) inputRef.current?.focus();
+    if (remote) return;
+    const focus = () => {
+      const el = inputRef.current;
+      if (el && document.activeElement !== el) el.focus({ preventScroll: true });
+    };
+    focus();
+    const ids = [setTimeout(focus, 50), setTimeout(focus, 200), setTimeout(focus, 500)];
+    return () => ids.forEach(clearTimeout);
   }, [remote]);
 
   const handleSubmit = (e: FormEvent) => {

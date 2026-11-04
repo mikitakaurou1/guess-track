@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import type { GameState } from '../game/gameReducer';
 import type { Track } from '../types/game';
 import PlayerCard from './PlayerCard';
@@ -8,13 +9,19 @@ import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
 import Icon from './Icon';
 interface Props { state: GameState; track: Track | null; positionMs: number; soundBlocked: boolean; nextBusy: boolean; onEnableSound: () => void; onBuzz: (player: number) => void; onSubmit: (text: string) => void; onTimeout: () => void; onSkip: () => void; onNext: () => void; onFinish: () => void; onRetry: () => void; }
-export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, onEnableSound, onBuzz, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry }: Props) {
+export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, onEnableSound, onBuzz: onBuzzRaw, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry }: Props) {
   const config = state.config!; const names = config.playerNames; const owners = config.owners ?? names.map(() => null);
   const canBuzz = state.phase === 'playing';
+  // Нажатие «ЖМУ!»: сразу рисуем поле ответа и ставим в него курсор внутри того же жеста пользователя (так фокус разрешён и на телефоне)
+  const onBuzz = (player: number) => {
+    flushSync(() => onBuzzRaw(player));
+    document.querySelector<HTMLInputElement>('.answer-form input')?.focus({ preventScroll: true });
+  };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if ((e.target as HTMLElement).tagName === 'INPUT') return; const n = parseInt(e.key, 10); if (n >= 1 && n <= names.length && owners[n - 1] === null) onBuzz(n - 1); };
     window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler);
-  }, [names.length, owners, onBuzz]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names.length, owners, onBuzzRaw]);
   const clipLeft = state.phase === 'clipDone' || state.phase === 'reveal' ? 0 : Math.max(0, 1 - positionMs / (config.clipSeconds * 1000));
   let status = '';
   if (state.phase === 'loading') status = soundBlocked ? 'Браузер не дал включить звук сам — нажмите кнопку один раз' : state.failStreak > 0 ? 'Трек не отвечает — подбираем другой...' : 'Загружаем трек...';
