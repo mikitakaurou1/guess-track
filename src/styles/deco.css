@@ -38,7 +38,7 @@
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.025); }
 }
 
-/* Виниловые пластинки по краям: наполовину за границей экрана, медленно вращаются */
+/* Виниловые пластинки по краям: центр на границе экрана, видна половина, плавно вращаются */
 .deco-disc {
   --d: clamp(380px, 36vw, 640px);
   position: fixed;
@@ -49,19 +49,20 @@
   margin-top: calc(var(--d) / -2);
   border-radius: 50%;
 }
-.deco-disc.l { left: calc(var(--d) * -0.6); top: 64%; }
-.deco-disc.r { right: calc(var(--d) * -0.6); top: 36%; }
+.deco-disc.l { left: calc(var(--d) * -0.5); top: 64%; }
+.deco-disc.r { right: calc(var(--d) * -0.5); top: 36%; }
 
 .deco-disc .spin {
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background:
+    conic-gradient(from 0deg, rgba(139, 92, 246, 0.38), transparent 12%, transparent 52%, rgba(34, 211, 238, 0.3) 60%, transparent 72%),
     repeating-radial-gradient(circle at center, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 7px),
     radial-gradient(circle at center, #15122a 0%, #0a0910 100%);
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow: 0 0 90px rgba(139, 92, 246, 0.2), inset 0 0 70px rgba(0, 0, 0, 0.6);
-  animation: disc-spin 56s linear infinite;
+  animation: disc-spin 26s linear infinite;
 }
 .deco-disc.r .spin { animation-direction: reverse; }
 @keyframes disc-spin { to { transform: rotate(360deg); } }
@@ -114,5 +115,5 @@
   .bg-rings i:nth-child(4) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bg-rings i, .deco-disc .spin { animation: none; }
+  .bg-rings i { animation: none; }
 }
