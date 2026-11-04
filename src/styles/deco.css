@@ -98,17 +98,6 @@
   border-radius: 50%;
   background: #0a0910;
 }
-.deco-disc .label::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 12%;
-  width: 8%;
-  height: 8%;
-  margin-left: -4%;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.7);
-}
 
 /* Неподвижный мягкий свет без границ */
 .deco-disc .sheen {
