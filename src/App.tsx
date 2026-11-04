@@ -6,7 +6,6 @@ import FinalScreen from './components/FinalScreen';
 import GuestApp from './components/GuestApp';
 import Deco from './components/Deco';
 import Logo from './components/Logo';
-import DebugLog from './components/DebugLog'; // DEBUG-LOG
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
@@ -36,7 +35,5 @@ export default function App() {
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={game.reset}/>}
       </>}
       <p className='muted small center-text'>разработчик: mikitakaurou</p>
-    </main>
-    {mode === 'host' && <DebugLog entries={game.debugLog} onClear={game.clearDebugLog}/>}{/* DEBUG-LOG */}
-  </>;
+    </main></>;
 }
