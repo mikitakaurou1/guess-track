@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ command }) => ({
   plugins: [react()],
   define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
-  base: command === 'build' ? '/soundcloud-quiz/' : '/',
+  base: command === 'build' ? '/guess-track/' : '/',
   server: {
     host: true,
     proxy: {
