@@ -208,12 +208,18 @@ export class SoundCloudPlayer {
     return info;
   }
 
-  // Хост, шаг 2: запустить подготовленный трек
-  async startPrepared(): Promise<boolean> {
+  // Хост, шаг 2: запустить подготовленный трек.
+  // fast: трек уже прогрет (игра с гостями), события прогресса принимаем сразу, без паузы 400 мс —
+  // так кнопки загораются в момент, когда звук реально пошёл.
+  async startPrepared(fast = false): Promise<boolean> {
     const myToken = this.token;
     if (this.preparedToken !== myToken) return false;
     this.widget.seekTo(0);
     this.widget.play();
+    if (fast) {
+      this.ready = true;
+      return true;
+    }
     await sleep(400);
     if (myToken !== this.token) return false;
     this.ready = true;

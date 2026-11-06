@@ -70,7 +70,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     if (pre && pre.round === nextRound && pre.trackIndex === nextIdx) return;
     const entry: Preload = { round: nextRound, trackIndex: nextIdx, ok: false, promise: Promise.resolve(undefined) };
     setPreloadDone(false);
-    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false, true)
+    // В играх с гостями следующий трек сразу прогреваем (буферизуем): тогда после общей команды «go» он стартует мгновенно
+    const warmPreload = (state.config?.owners ?? []).some(o => o !== null);
+    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], warmPreload, true)
       .then(info => {
         if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
         return info;
@@ -106,7 +108,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
         if (remote) await waitForGuests(key, GUEST_WAIT_MS);
         if (cancelled) return;
         net?.send({ t: 'broadcast', data: { k: 'go', key } });
-        const started = await player.startPrepared();
+        const started = await player.startPrepared(remote);
         if (cancelled) return;
         if (!started) { fail(); return; }
       }
@@ -131,15 +133,16 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     }, START_TIMEOUT_MS);
   }, []);
 
-  // «Дальше»: если следующий трек уже загружен, запускаем его прямо в этом нажатии (так телефон разрешает звук)
+  // «Дальше»: старый трек выключаем сразу (в любом режиме). Если следующий трек уже загружен и игра без гостей,
+  // запускаем его прямо в этом нажатии (так телефон разрешает звук)
   const next = useCallback(() => {
     const s = stateRef.current;
     const ps = playersRef.current;
     const remote = (s.config?.owners ?? []).some(o => o !== null);
     const nextRound = s.round + 1;
     const pre = preloadRef.current;
+    ps?.[s.round % 2].detach();
     if (ps && !remote && pre && pre.ok && pre.round === nextRound && pre.trackIndex === s.order[nextRound]) {
-      ps[s.round % 2].detach();
       void ps[nextRound % 2].startPrepared();
       tapStartRef.current = { round: nextRound, trackIndex: pre.trackIndex };
     }
