@@ -60,7 +60,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
 
   useEffect(() => { if (state.phase !== 'loading') setSoundBlocked(false); }, [state.phase]);
 
-  // Пока играет текущий трек, второй плеер заранее загружает следующий
+  // Пока играет текущий трек, второй плеер заранее загружает следующий (без запуска звука: два плеера SoundCloud не должны играть одновременно)
   useEffect(() => {
     if (!players || state.phase !== 'playing') return;
     const nextRound = state.round + 1;
@@ -70,9 +70,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     if (pre && pre.round === nextRound && pre.trackIndex === nextIdx) return;
     const entry: Preload = { round: nextRound, trackIndex: nextIdx, ok: false, promise: Promise.resolve(undefined) };
     setPreloadDone(false);
-    // В играх с гостями следующий трек сразу прогреваем (буферизуем): тогда после общей команды «go» он стартует мгновенно
-    const warmPreload = (state.config?.owners ?? []).some(o => o !== null);
-    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], warmPreload, true)
+    entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false, true)
       .then(info => {
         if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
         return info;
@@ -94,9 +92,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     let wdStart: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       let info: Track | null | undefined;
+      let fromPreload = false;
       const pre = preloadRef.current;
       if (pre && pre.round === state.round && pre.trackIndex === trackIndex) {
         info = await pre.promise;
+        fromPreload = !!info;
         if (cancelled) return;
       }
       if (!info) info = await player.prepareTrack(state.tracks[trackIndex], remote);
@@ -105,7 +105,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       clearTimeout(wdLoad); dispatch({ type: 'TRACK_INFO', trackIndex, info });
       const tapped = tapStartRef.current?.round === state.round && tapStartRef.current.trackIndex === trackIndex;
       if (!tapped) {
-        if (remote) await waitForGuests(key, GUEST_WAIT_MS);
+        // Игра с гостями: пока гости загружают трек, хозяин беззвучно прогревает свой.
+        // Старый плеер к этому моменту уже остановлен кнопкой «Дальше», так что два плеера не играют одновременно
+        if (remote) await Promise.all([fromPreload ? player.warmPrepared() : Promise.resolve(), waitForGuests(key, GUEST_WAIT_MS)]);
         if (cancelled) return;
         net?.send({ t: 'broadcast', data: { k: 'go', key } });
         const started = await player.startPrepared(remote);
