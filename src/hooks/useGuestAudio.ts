@@ -34,7 +34,7 @@ export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapsh
     if (!player || !go || !enabled) return;
     const cur = loaded.current; if (!cur || cur.key !== go.key || keyRef.current !== go.key) return;
     const goKey = go.key; startedKey.current = goKey;
-    cur.promise.then(ok => { if (ok && startedKey.current === goKey) tryPlay(() => player.resume()); });
+    cur.promise.then(ok => { if (ok && startedKey.current === goKey) tryPlay(() => player.playWarmed()); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [go]);
   useEffect(() => {

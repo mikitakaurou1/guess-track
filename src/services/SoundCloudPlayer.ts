@@ -21,10 +21,30 @@ export class SoundCloudPlayer {
   private warming = false;
   private warmResolve: (() => void) | null = null;
   private unlockingAudio = false;
+  // Контроль старта «с начала»: виджет может запомнить позицию уже игравшегося трека
+  private expectStart = false;
+  private expectUntil = 0;
+  private fixCount = 0;
+  private lastFix = 0;
+  private sawProgress = false;
+  private kickToken = 0;
 
   constructor(iframe: HTMLIFrameElement) {
     this.widget = SC.Widget(iframe);
     this.widget.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
+      this.sawProgress = true;
+      if (this.expectStart && Date.now() < this.expectUntil) {
+        // Трек стартовал не с начала: возвращаем в начало и это событие наружу не отдаём
+        if (e.currentPosition > 1500 && this.fixCount < 3) {
+          if (Date.now() - this.lastFix > 400) {
+            this.lastFix = Date.now();
+            this.fixCount++;
+            this.widget.seekTo(0);
+          }
+          return;
+        }
+        this.expectStart = false;
+      }
       if (this.ready) this.listeners.forEach((l) => l(e.currentPosition));
     });
     this.widget.bind(SC.Widget.Events.PLAY, () => {
@@ -58,6 +78,24 @@ export class SoundCloudPlayer {
     return () => this.playListeners.delete(listener);
   }
 
+  // Начало запуска «с нуля»: включаем проверку позиции по первому событию прогресса
+  private markStart(): void {
+    this.expectStart = true;
+    this.expectUntil = Date.now() + 3000;
+    this.fixCount = 0;
+    this.sawProgress = false;
+  }
+
+  // Если после запуска не пришло ни одного события прогресса, повторяем play() (первый мог быть проигнорирован)
+  private kick(): void {
+    const t = ++this.kickToken;
+    [1200, 2600].forEach((ms) =>
+      setTimeout(() => {
+        if (t === this.kickToken && !this.sawProgress) this.widget.play();
+      }, ms),
+    );
+  }
+
   // Вызывать прямо из обработчика нажатия (синхронно): на телефоне это даёт браузеру жест пользователя,
   // после которого звук виджета можно запускать без новых нажатий. Работает только если в виджет уже что-то загружено.
   unlock(): void {
@@ -77,6 +115,8 @@ export class SoundCloudPlayer {
   // Остановить плеер и перестать слушать его прогресс (когда звук передан второму плееру)
   detach(): void {
     this.ready = false;
+    this.expectStart = false;
+    this.kickToken++;
     this.widget.pause();
   }
 
@@ -198,6 +238,8 @@ export class SoundCloudPlayer {
   async prepareTrack(track: Track, warm: boolean, lenient = false): Promise<Track | null | undefined> {
     const myToken = ++this.token;
     this.ready = false;
+    this.expectStart = false;
+    this.kickToken++;
     this.widget.pause();
 
     const loaded = await this.loadSrc(trackSrc(track));
@@ -217,17 +259,20 @@ export class SoundCloudPlayer {
   }
 
   // Хост, шаг 2: запустить подготовленный трек.
-  // fast: трек уже прогрет (игра с гостями), события прогресса принимаем сразу, без паузы 400 мс —
-  // так кнопки загораются в момент, когда звук реально пошёл.
+  // fast: трек уже прогрет и стоит в начале (игра с гостями): события прогресса принимаем сразу, без паузы 400 мс,
+  // а если звук не пошёл, повторяем play().
   async startPrepared(fast = false): Promise<boolean> {
     const myToken = this.token;
     if (this.preparedToken !== myToken) return false;
-    this.widget.seekTo(0);
-    this.widget.play();
+    this.markStart();
     if (fast) {
+      this.widget.play();
       this.ready = true;
+      this.kick();
       return true;
     }
+    this.widget.seekTo(0);
+    this.widget.play();
     await sleep(400);
     if (myToken !== this.token) return false;
     this.ready = true;
@@ -238,6 +283,8 @@ export class SoundCloudPlayer {
   async loadOnly(src: string, warm = false): Promise<boolean> {
     const myToken = ++this.token;
     this.ready = false;
+    this.expectStart = false;
+    this.kickToken++;
     this.widget.pause();
     const ok = await this.loadSrc(src);
     if (!ok || myToken !== this.token) return false;
@@ -245,22 +292,34 @@ export class SoundCloudPlayer {
     return myToken === this.token;
   }
 
+  // Гость: запуск уже прогретого трека по общей команде «go»: трек стоит в начале, позицию контролируем по первому событию
+  playWarmed(): void {
+    this.markStart();
+    this.widget.play();
+    this.kick();
+  }
+
   playFromStart(): void {
+    this.markStart();
     this.widget.seekTo(0);
     this.widget.play();
   }
 
   playFull(): void {
     this.ready = false;
+    this.markStart();
     this.widget.seekTo(0);
     this.widget.play();
   }
 
   pause(): void {
+    this.expectStart = false;
+    this.kickToken++;
     this.widget.pause();
   }
 
   resume(): void {
+    this.expectStart = false;
     this.widget.play();
   }
 }
