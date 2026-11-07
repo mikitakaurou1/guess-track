@@ -51,7 +51,12 @@ export function useGuestRoom() {
         ws.send(JSON.stringify({ t: 'to_host', data: { k: 'avatar', avatar: validAvatar(localStorage.getItem('guestAvatar') ?? undefined) } }));
         setMyId(m.id); setStatus('joined');
       } else if (m.t === 'host_msg') {
-        if (m.data?.k === 'go') setGo({ key: String(m.data.key), n: Date.now() }); else setSnapshot(m.data);
+        if (m.data?.k === 'go') setGo({ key: String(m.data.key), n: Date.now() });
+        else {
+          // Замер пинга: сразу, до отрисовки, отвечаем хозяину тем же номером
+          if (typeof m.data?.hp?.n === 'number') ws.send(JSON.stringify({ t: 'to_host', data: { k: 'hpong', n: m.data.hp.n } }));
+          setSnapshot(m.data);
+        }
       } else if (m.t === 'room_closed') setStatus('closed');
       else if (m.t === 'error') { setError(m.message); setStatus('idle'); ws.close(); }
     };

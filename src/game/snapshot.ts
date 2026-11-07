@@ -1,6 +1,7 @@
 import type { GuestSnapshot } from '../types/room';
 import type { GameState } from './gameReducer';
 import { selectCurrentTrack } from './gameReducer';
+import { windowKey } from './buzz';
 import { trackSrc } from '../services/SoundCloudPlayer';
 export function buildSnapshot(state: GameState, positionMs: number): GuestSnapshot {
   const c = state.config;
@@ -16,5 +17,6 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     reveal: state.phase === 'reveal' ? state.history[state.history.length - 1] ?? null : null,
     history: state.phase === 'final' ? state.history : null, failStreak: state.failStreak,
     audio: hasAudio ? { key: `${state.round}:${state.order[state.round]}`, src: trackSrc(track!) } : null,
+    win: windowKey(state),
   };
 }

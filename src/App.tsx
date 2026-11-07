@@ -22,7 +22,8 @@ export default function App() {
   const { state } = game;
   const bucket = Math.floor(game.positionMs / 500);
   useEffect(() => {
-    if (room.code) room.send({ t: 'broadcast', data: buildSnapshot(state, game.positionMs) });
+    // hp: замер пинга гостей (гость отвечает сразу после получения)
+    if (room.code) room.send({ t: 'broadcast', data: { ...buildSnapshot(state, game.positionMs), hp: game.nextPing() } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.code, room.guests, state, bucket]);
   useEffect(() => { if (room.code) room.send({ t: 'set_open', open: state.phase === 'setup' }); }, [room.code, state.phase, room.send]);
