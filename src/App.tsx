@@ -4,12 +4,14 @@ import SetupScreen from './components/SetupScreen';
 import GameScreen from './components/GameScreen';
 import FinalScreen from './components/FinalScreen';
 import GuestApp from './components/GuestApp';
+import SonglessGame from './components/SonglessGame';
 import Deco from './components/Deco';
 import Logo from './components/Logo';
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
 import { buildSnapshot } from './game/snapshot';
+import type { GameConfig } from './types/game';
 const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
 export default function App() {
   const iframeA = useRef<HTMLIFrameElement>(null);
@@ -19,6 +21,7 @@ export default function App() {
   const game = useGame(players, { send: obj => sendRef.current(obj) });
   const room = useHostRoom(game.handleRemote); sendRef.current = room.send;
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
+  const [songless, setSongless] = useState<GameConfig | null>(null);
   const { state } = game;
   const rsSeed = state.config?.randomStart ? (state.config.startSeed ?? 0) : null;
   const rsClip = state.config?.clipSeconds ?? 10;
@@ -34,7 +37,8 @@ export default function App() {
     <main className='wrap'><Logo/><HiddenPlayer refA={iframeA} refB={iframeB}/>
       {mode === 'join' && <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')}/>}
       {mode === 'host' && <>
-        {state.phase === 'setup' && <SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); game.startGame(cfg); }} onJoinMode={() => setMode('join')}/>}
+        {state.phase === 'setup' && <div hidden={!!songless}><SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); if (cfg.songless) setSongless(cfg); else game.startGame(cfg); }} onJoinMode={() => setMode('join')}/></div>}
+        {state.phase === 'setup' && songless && <SonglessGame players={players} playlist={game.playlist} config={songless} onExit={() => setSongless(null)}/>}
         {state.phase !== 'setup' && state.phase !== 'final' && state.config && <GameScreen state={state} track={game.track} positionMs={game.positionMs} soundBlocked={game.soundBlocked} nextBusy={game.nextBusy} onEnableSound={game.enableSound} onBuzz={game.buzz} onSubmit={game.submitAnswer} onTimeout={game.answerTimeout} onSkip={game.skip} onNext={game.next} onFinish={game.finish} onRetry={() => { player?.unlock(); game.retry(); }}/>}
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={game.reset}/>}
       </>}
