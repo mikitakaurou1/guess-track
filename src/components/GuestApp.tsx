@@ -30,9 +30,9 @@ export default function GuestApp({ player, initialCode, onBack }: Props) {
   if (g.status === 'closed') return <section className='glass center-text'><h2>Комната закрыта</h2><p className='muted'>Хозяин вышел или потерялось соединение.</p><button className='btn btn-primary' onClick={g.leave}>Подключиться заново</button></section>;
   if (g.status !== 'joined' || !g.myId) return <JoinScreen initialCode={initialCode} busy={g.status === 'connecting'} error={g.error} onJoin={(code, name) => { player?.unlock(); g.join(code, name); }} onBack={onBack}/>;
   if (!g.snapshot) return <section className='glass center-text'><h2>Подключено <Icon name='check-circle' size={24} className='ic-ok'/></h2><p className='muted'>Получаем состояние игры...</p></section>;
-  return <>{reverse && <div className='step'>Перевертыш · игра в комнате</div>}<GuestScreen snap={g.snapshot} myId={g.myId} soundOn={soundOn} audioState={audioState} onToggleSound={toggleSound} onResync={resync} onBuzz={playerIndex => {
+  return <GuestScreen snap={g.snapshot} myId={g.myId} soundOn={soundOn} audioState={audioState} onToggleSound={toggleSound} onResync={resync} onBuzz={playerIndex => {
     const win = g.snapshot?.win;
     const r = win && litWin.current === win ? Math.round(performance.now() - litAt.current) : undefined;
     g.send({ k: 'buzz', player: playerIndex, win, r });
-  }} onAnswer={text => g.send({ k: 'answer', text, answerKey: g.snapshot?.answerKey })}/></>;
+  }} onAnswer={text => g.send({ k: 'answer', text, answerKey: g.snapshot?.answerKey })}/>;
 }
