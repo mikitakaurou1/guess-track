@@ -132,6 +132,33 @@ app.get('/api/resolve', async (req, res) => {
   }
 });
 
+// Данные плейлиста для карточки на экране выбора источников: название, автор, обложка. Кэш на 10 минут.
+const infoCache = new Map();
+app.get('/api/playlist-info', async (req, res) => {
+  try {
+    const u = new URL(String(req.query.url ?? '').trim());
+    if (!/(^|\.)soundcloud\.com$/i.test(u.hostname)) {
+      return res.status(400).json({ error: 'Нужна ссылка SoundCloud' });
+    }
+    const clean = `${u.origin}${u.pathname}`;
+    const hit = infoCache.get(clean);
+    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return res.json(hit.data);
+    const p = await v2(`https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(clean)}`);
+    if (p.kind !== 'playlist') return res.status(400).json({ error: 'Это не плейлист' });
+    const art = p.artwork_url || (p.tracks ?? []).find((t) => t.artwork_url)?.artwork_url || p.user?.avatar_url || null;
+    const data = {
+      title: p.title ?? '',
+      creator: p.user?.username ?? '',
+      artwork: art ? String(art).replace('-large', '-t300x300') : null,
+    };
+    infoCache.set(clean, { at: Date.now(), data });
+    res.json(data);
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ error: 'Не удалось получить данные плейлиста' });
+  }
+});
+
 /* ---------- Комнаты (WebSocket-ретранслятор) ---------- */
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024 });

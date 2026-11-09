@@ -4,9 +4,13 @@ import type { HostRoom } from '../hooks/useRoom';
 import type { SourceStat } from '../hooks/useGame';
 import Icon from './Icon';
 import Avatar, { AvatarPicker, avatarOptions } from './Avatar';
+import FeaturedPlaylist from './FeaturedPlaylist';
 import '../styles/howto.css';
 import '../styles/setup.css';
+import '../styles/setupExtras.css';
 interface Props { ready: boolean; busy: boolean; error: string | null; playlist: Track[]; sources: SourceStat[]; room: HostRoom; onLoadSources: (urls: string[]) => void; onChangePlaylist: () => void; onStart: (config: GameConfig) => void; onJoinMode: () => void; }
+const FEATURED_URL = 'https://soundcloud.com/nikitkakovrov4/sets/guesstrack';
+const FEATURED_MATCH = 'nikitkakovrov4/sets/guesstrack';
 const toNum = (s: string, min: number, max: number, fallback: number) => { const n = parseInt(s, 10); return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n)); };
 const playersWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? 'игрок' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'игрока' : 'игроков';
 function NumberField({ value, onChange, min, max }: { value: string; onChange: (v: string) => void; min: number; max: number }) {
@@ -15,6 +19,7 @@ function NumberField({ value, onChange, min, max }: { value: string; onChange: (
 export default function SetupScreen({ ready, busy, error, playlist, sources, room, onLoadSources, onChangePlaylist, onStart, onJoinMode }: Props) {
   const [urls, setUrls] = useState<string[]>(['']);
   const [localError, setLocalError] = useState('');
+  const [howtoOpen, setHowtoOpen] = useState(false);
   const [localCount, setLocalCount] = useState(1);
   const [names, setNames] = useState(['Игрок 1', 'Игрок 2', 'Игрок 3', 'Игрок 4', 'Игрок 5']);
   const [avatars, setAvatars] = useState<string[]>(avatarOptions.slice(0, 5));
@@ -24,6 +29,16 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const [countDraft, setCountDraft] = useState<string | null>(null);
   const [randomOrder, setRandomOrder] = useState(true);
   const total = playlist.length;
+  const hasFeatured = urls.some(u => u.toLowerCase().includes(FEATURED_MATCH));
+  const canAddFeatured = urls.some(u => !u.trim()) || urls.length < 5;
+  const addFeatured = () => {
+    if (hasFeatured) return;
+    setUrls(p => {
+      const i = p.findIndex(x => !x.trim());
+      if (i >= 0) return p.map((x, k) => k === i ? FEATURED_URL : x);
+      return p.length < 5 ? [...p, FEATURED_URL] : p;
+    });
+  };
   const load = () => {
     const filled = urls.map(u => u.trim()).filter(Boolean);
     if (!filled.length || filled.some(u => !/(soundcloud\.com|soundcloud\.app\.goo\.gl|snd\.sc)\//.test(u))) { setLocalError('Нужны ссылки именно с SoundCloud (soundcloud.com/… или on.soundcloud.com/…): на профиль или плейлист. Ссылки Spotify, YouTube и других сервисов не подходят.'); return; }
@@ -32,11 +47,12 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   if (!total) return <section className='glass'>
     <div className='step'>Шаг 1 из 2</div><h2>Откуда брать треки</h2>
     <p className='only-sc'>Игра работает только с музыкой из <b>SoundCloud</b>. Вставьте ссылку на профиль или плейлист именно оттуда (Spotify, YouTube, Яндекс Музыка и прочие не поддерживаются).</p>
-    <div className='howto glass-inner'><div className='howto-title'>Какую ссылку взять</div><ul className='howto-list'>
+    <div className='howto glass-inner'><div className='howto-title'>Какую ссылку взять</div><div className={`howto-body${howtoOpen ? '' : ' collapsed'}`}><ul className='howto-list'>
       <li><span className='howto-num'>1</span><div><b>Профиль — возьмём все лайки человека</b><span>Откройте страницу профиля на soundcloud.com и скопируйте адрес из строки браузера, например <code>soundcloud.com/username</code>. У этого пользователя лайки должны быть открыты для всех.</span></div></li>
       <li><span className='howto-num'>2</span><div><b>Плейлист или альбом — возьмём все его треки</b><span>Откройте плейлист, нажмите «Поделиться» → «Скопировать ссылку» (или возьмите адрес из строки браузера), например <code>soundcloud.com/username/sets/name</code>. Плейлист должен быть публичным или доступным по «секретной ссылке».</span></div></li>
       <li><span className='howto-num'>3</span><div><b>С телефона, из приложения SoundCloud</b><span>Нажмите «Поделиться» → «Скопировать ссылку» на профиле или плейлисте. Короткие ссылки вида <code>on.soundcloud.com/…</code> тоже подходят.</span></div></li>
-    </ul><div className='howto-note'><Icon name='x-circle' size={16}/><span>Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до 5 источников: тогда в игре будет поровну треков от каждого.</span></div></div>
+    </ul><div className='howto-note'><Icon name='x-circle' size={16}/><span>Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до 5 источников: тогда в игре будет поровну треков от каждого.</span></div></div><button className='howto-more' onClick={() => setHowtoOpen(o => !o)} aria-expanded={howtoOpen}>{howtoOpen ? 'свернуть' : 'ещё'}</button></div>
+    <FeaturedPlaylist url={FEATURED_URL} fallbackTitle='GuessTrack' fallbackCreator='nikitkakovrov4' added={hasFeatured} disabled={!canAddFeatured} onAdd={addFeatured}/>
     {urls.map((u, i) => <div key={i} className='name-field'><span className={`avatar c${i}`}>{i + 1}</span><input className='input' value={u} onChange={e => setUrls(p => p.map((x, k) => k === i ? e.target.value : x))} onKeyDown={e => e.key === 'Enter' && load()} placeholder='Вставьте ссылку SoundCloud: профиль или плейлист'/>{urls.length > 1 && <button className='btn btn-ghost' onClick={() => setUrls(p => p.filter((_, k) => k !== i))}><Icon name='x' size={16}/></button>}</div>)}
     {urls.length < 5 && <button className='btn btn-ghost' onClick={() => setUrls(p => [...p, ''])}><Icon name='plus' size={16}/> Добавить ещё один источник</button>}
     <button className='btn btn-primary btn-lg' onClick={load} disabled={!ready || busy}>{busy ? 'Загружаем треки...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}</button>
