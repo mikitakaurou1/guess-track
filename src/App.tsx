@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import HiddenPlayer from './components/HiddenPlayer';
 import SetupScreen from './components/SetupScreen';
 import GameScreen from './components/GameScreen';
@@ -20,6 +20,9 @@ export default function App() {
   const room = useHostRoom(game.handleRemote); sendRef.current = room.send;
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const { state } = game;
+  const rsSeed = state.config?.randomStart ? (state.config.startSeed ?? 0) : null;
+  const rsClip = state.config?.clipSeconds ?? 10;
+  useLayoutEffect(() => { const m = rsSeed === null ? undefined : { seed: rsSeed, clipMs: rsClip * 1000 }; players?.forEach(p => p.setStartMode(m)); }, [players, rsSeed, rsClip]);
   const bucket = Math.floor(game.positionMs / 500);
   useEffect(() => {
     // hp: замер пинга гостей (гость отвечает сразу после получения)
