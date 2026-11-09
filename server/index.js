@@ -132,7 +132,27 @@ app.get('/api/resolve', async (req, res) => {
   }
 });
 
-// Данные плейлиста для карточки на экране выбора источников: название, автор, обложка. Кэш на 10 минут.
+// Треки плейлиста для карточки: у SoundCloud большинство треков приходит «заглушками» (только id), их догружаем пачками по 50.
+async function playlistTracks(p) {
+  const list = (p.tracks ?? []).filter((t) => t?.id).slice(0, 500);
+  const full = new Map(list.filter((t) => t.title).map((t) => [t.id, t]));
+  const missing = list.filter((t) => !t.title).map((t) => t.id);
+  for (let i = 0; i < missing.length; i += 50) {
+    try {
+      const arr = await v2(`https://api-v2.soundcloud.com/tracks?ids=${missing.slice(i, i + 50).join(',')}`);
+      for (const t of arr) if (t?.id) full.set(t.id, t);
+    } catch (e) {
+      console.error(e);
+      break;
+    }
+  }
+  return list
+    .map((t) => full.get(t.id))
+    .filter(Boolean)
+    .map((t) => ({ title: t.title ?? '', artist: t.publisher_metadata?.artist || t.user?.username || '' }));
+}
+
+// Данные плейлиста для карточки на экране выбора источников: название, автор, обложка, треки. Кэш на 2 минуты.
 const infoCache = new Map();
 app.get('/api/playlist-info', async (req, res) => {
   try {
@@ -142,7 +162,7 @@ app.get('/api/playlist-info', async (req, res) => {
     }
     const clean = `${u.origin}${u.pathname}`;
     const hit = infoCache.get(clean);
-    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return res.json(hit.data);
+    if (hit && Date.now() - hit.at < 2 * 60 * 1000) return res.json(hit.data);
     const p = await v2(`https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(clean)}`);
     if (p.kind !== 'playlist') return res.status(400).json({ error: 'Это не плейлист' });
     const art = p.artwork_url || (p.tracks ?? []).find((t) => t.artwork_url)?.artwork_url || p.user?.avatar_url || null;
@@ -150,6 +170,7 @@ app.get('/api/playlist-info', async (req, res) => {
       title: p.title ?? '',
       creator: p.user?.username ?? '',
       artwork: art ? String(art).replace('-large', '-t300x300') : null,
+      tracks: await playlistTracks(p),
     };
     infoCache.set(clean, { at: Date.now(), data });
     res.json(data);
