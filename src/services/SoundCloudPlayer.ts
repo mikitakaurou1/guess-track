@@ -11,6 +11,33 @@ const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(naviga
 
 type ProgressListener = (positionMs: number) => void;
 
+// Режим «Не с начала»: зерно игры и длина фрагмента
+export interface StartMode { seed: number; clipMs: number; }
+const MIN_START_MS = 5000; // не раньше 5-й секунды
+const END_MARGIN_MS = 3000; // и не ближе 3 секунд к концу после фрагмента
+
+// Число от 0 до 1, одинаковое для одной и той же строки (хозяин и гости получают одну точку старта)
+function hashFrac(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// Точка старта в мс; 0, если длительность неизвестна или трек слишком короткий
+function computeStartOffset(durationMs: number, clipMs: number, frac: number): number {
+  const maxStart = durationMs - clipMs - END_MARGIN_MS;
+  if (!durationMs || maxStart <= MIN_START_MS + 5000) return 0;
+  return Math.round(MIN_START_MS + frac * (maxStart - MIN_START_MS));
+}
+
 export class SoundCloudPlayer {
   private widget: SCWidget;
   private listeners = new Set<ProgressListener>();
@@ -21,31 +48,39 @@ export class SoundCloudPlayer {
   private warming = false;
   private warmResolve: (() => void) | null = null;
   private unlockingAudio = false;
-  // Контроль старта «с начала»: виджет может запомнить позицию уже игравшегося трека
+  // Контроль старта: виджет может запомнить позицию уже игравшегося трека
   private expectStart = false;
   private expectUntil = 0;
+  private expectOffset = 0; // с какой позиции (мс) должен стартовать трек
   private fixCount = 0;
   private lastFix = 0;
   private sawProgress = false;
   private kickToken = 0;
+  // Режим «Не с начала»
+  private startMode: StartMode | undefined;
+  private startOffset = 0; // точка старта текущего подготовленного трека (мс)
+  private progressBase = 0; // позиция, от которой считается прогресс фрагмента (мс)
 
   constructor(iframe: HTMLIFrameElement) {
     this.widget = SC.Widget(iframe);
     this.widget.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
       this.sawProgress = true;
       if (this.expectStart && Date.now() < this.expectUntil) {
-        // Трек стартовал не с начала: возвращаем в начало и это событие наружу не отдаём
-        if (e.currentPosition > 1500 && this.fixCount < 3) {
+        // Трек стартовал не оттуда, откуда нужно: возвращаем на точку старта и это событие наружу не отдаём
+        if (Math.abs(e.currentPosition - this.expectOffset) > 1500 && this.fixCount < 3) {
           if (Date.now() - this.lastFix > 400) {
             this.lastFix = Date.now();
             this.fixCount++;
-            this.widget.seekTo(0);
+            this.widget.seekTo(this.expectOffset);
           }
           return;
         }
         this.expectStart = false;
       }
-      if (this.ready) this.listeners.forEach((l) => l(e.currentPosition));
+      if (this.ready) {
+        const pos = Math.max(0, e.currentPosition - this.progressBase);
+        this.listeners.forEach((l) => l(pos));
+      }
     });
     this.widget.bind(SC.Widget.Events.PLAY, () => {
       if (this.warming) {
@@ -78,10 +113,17 @@ export class SoundCloudPlayer {
     return () => this.playListeners.delete(listener);
   }
 
-  // Начало запуска «с нуля»: включаем проверку позиции по первому событию прогресса
-  private markStart(): void {
+  // Включить или выключить режим «Не с начала» (действует на треки, которые загружаются после вызова)
+  setStartMode(mode: StartMode | undefined): void {
+    this.startMode = mode;
+  }
+
+  // Начало запуска: включаем проверку позиции по первому событию прогресса
+  private markStart(offset: number): void {
     this.expectStart = true;
     this.expectUntil = Date.now() + 3000;
+    this.expectOffset = offset;
+    this.progressBase = offset;
     this.fixCount = 0;
     this.sawProgress = false;
   }
@@ -184,6 +226,25 @@ export class SoundCloudPlayer {
     });
   }
 
+  // Длительность загруженного трека в мс (0, если узнать не удалось)
+  private getDurationMs(timeoutMs = 2000): Promise<number> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(0), timeoutMs);
+      (this.widget as unknown as { getDuration: (cb: (ms: number) => void) => void }).getDuration((ms) => {
+        clearTimeout(timer);
+        resolve(typeof ms === 'number' && ms > 0 ? ms : 0);
+      });
+    });
+  }
+
+  // Точка старта для загруженного трека: 0, если режим «Не с начала» выключен
+  private async pickOffset(src: string): Promise<number> {
+    const mode = this.startMode;
+    if (!mode) return 0;
+    const duration = await this.getDurationMs();
+    return computeStartOffset(duration, mode.clipMs, hashFrac(`${mode.seed}:${src}`));
+  }
+
   private loadSrc(src: string): Promise<boolean> {
     return new Promise((resolve) => {
       let done = false;
@@ -204,6 +265,7 @@ export class SoundCloudPlayer {
 
   // «Прогрев»: беззвучно запускаем трек, чтобы браузер заранее загрузил поток.
   // Тогда настоящий старт происходит почти мгновенно. На iOS громкость не работает — пропускаем.
+  // В режиме «Не с начала» прогреваем именно тот участок, с которого будет старт.
   private async warmUp(): Promise<void> {
     if (isIOS) return;
     this.warming = true;
@@ -214,12 +276,13 @@ export class SoundCloudPlayer {
         resolve();
       };
       this.setVolume(0);
+      if (this.startOffset > 0) this.widget.seekTo(this.startOffset);
       this.widget.play();
     });
     this.warmResolve = null;
     await sleep(300); // даём буферу набраться
     this.widget.pause();
-    this.widget.seekTo(0);
+    this.widget.seekTo(this.startOffset);
     this.setVolume(100);
     this.warming = false;
   }
@@ -240,6 +303,7 @@ export class SoundCloudPlayer {
     this.ready = false;
     this.expectStart = false;
     this.kickToken++;
+    this.startOffset = 0;
     this.widget.pause();
 
     const loaded = await this.loadSrc(trackSrc(track));
@@ -251,6 +315,10 @@ export class SoundCloudPlayer {
     if (!info && lenient) info = { ...track };
     if (!info) return null;
 
+    const offset = await this.pickOffset(trackSrc(track));
+    if (myToken !== this.token) return undefined;
+    this.startOffset = offset;
+
     if (warm) await this.warmUp();
     if (myToken !== this.token) return undefined;
 
@@ -259,19 +327,20 @@ export class SoundCloudPlayer {
   }
 
   // Хост, шаг 2: запустить подготовленный трек.
-  // fast: трек уже прогрет и стоит в начале (игра с гостями): события прогресса принимаем сразу, без паузы 400 мс,
+  // fast: трек уже прогрет и стоит на точке старта (игра с гостями): события прогресса принимаем сразу, без паузы 400 мс,
   // а если звук не пошёл, повторяем play().
   async startPrepared(fast = false): Promise<boolean> {
     const myToken = this.token;
     if (this.preparedToken !== myToken) return false;
-    this.markStart();
+    this.markStart(this.startOffset);
     if (fast) {
+      if (isIOS && this.startOffset > 0) this.widget.seekTo(this.startOffset);
       this.widget.play();
       this.ready = true;
       this.kick();
       return true;
     }
-    this.widget.seekTo(0);
+    this.widget.seekTo(this.startOffset);
     this.widget.play();
     await sleep(400);
     if (myToken !== this.token) return false;
@@ -285,29 +354,35 @@ export class SoundCloudPlayer {
     this.ready = false;
     this.expectStart = false;
     this.kickToken++;
+    this.startOffset = 0;
     this.widget.pause();
     const ok = await this.loadSrc(src);
     if (!ok || myToken !== this.token) return false;
+    const offset = await this.pickOffset(src);
+    if (myToken !== this.token) return false;
+    this.startOffset = offset;
     if (warm) await this.warmUp();
     return myToken === this.token;
   }
 
-  // Гость: запуск уже прогретого трека по общей команде «go»: трек стоит в начале, позицию контролируем по первому событию
+  // Гость: запуск уже прогретого трека по общей команде «go»: трек стоит на точке старта, позицию контролируем по первому событию
   playWarmed(): void {
-    this.markStart();
+    this.markStart(this.startOffset);
+    if (isIOS && this.startOffset > 0) this.widget.seekTo(this.startOffset);
     this.widget.play();
     this.kick();
   }
 
   playFromStart(): void {
-    this.markStart();
-    this.widget.seekTo(0);
+    this.markStart(this.startOffset);
+    this.widget.seekTo(this.startOffset);
     this.widget.play();
   }
 
+  // Полное воспроизведение (после ответа): всегда с начала трека
   playFull(): void {
     this.ready = false;
-    this.markStart();
+    this.markStart(0);
     this.widget.seekTo(0);
     this.widget.play();
   }
