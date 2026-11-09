@@ -18,5 +18,6 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     history: state.phase === 'final' ? state.history : null, failStreak: state.failStreak,
     audio: hasAudio ? { key: `${state.round}:${state.order[state.round]}`, src: trackSrc(track!) } : null,
     win: windowKey(state),
+    rs: c?.randomStart ? { seed: c.startSeed ?? 0, clipMs: c.clipSeconds * 1000 } : null,
   };
 }
