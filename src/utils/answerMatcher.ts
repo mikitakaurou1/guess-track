@@ -62,6 +62,15 @@ function splitParts(s: string): string[] {
   return s.split(/\s+[-\u2013\u2014|\u2022\/]\s*|\s*[-\u2013\u2014|\u2022]\s+/);
 }
 
+// «МЕЙБИ БЕЙБИ-Аскорбинка»: дефис без пробелов делит название, только если хотя бы одна часть состоит из нескольких слов
+// (иначе это дефис внутри слова, как в «Spider-Man»). Слишком короткие части (меньше 3 букв) не берём.
+function splitTight(s: string): string[] {
+  const parts = s.split(/[-\u2013\u2014]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return [];
+  if (!parts.some((p) => /\s/.test(p))) return [];
+  return parts.filter((p) => squash(p).replace(/ /g, '').length >= 3);
+}
+
 // «LIPSTICK x 9mice» -> «LIPSTICK», «ПАПА +tewiq, ...» -> «ПАПА», «Название w/ Кто-то» -> «Название»
 function cutCollab(raw: string): string {
   const tokens = raw.trim().split(' ').filter(Boolean);
@@ -82,6 +91,7 @@ function candidates(title: string): Set<string> {
     const raws = [base];
     const parts = splitParts(base).map((p) => p.trim()).filter(Boolean);
     if (parts.length > 1) raws.push(...parts, parts.slice(1).join(' - '));
+    raws.push(...splitTight(base));
 
     for (const r of raws) {
       out.add(squash(r));
@@ -115,10 +125,12 @@ export function isCorrectAnswer(answer: string, title: string): boolean {
   if (!title || !title.trim() || !answer) return false;
   const a = squash(answer) || answer.trim().toLowerCase();
   if (!a) return false;
+  const aCompact = a.replace(/ /g, '');
 
   for (const t of candidates(title)) {
-    // 1. точное совпадение «скелетов» (без регистра, знаков, «x Артист» / «+ Артист» / «feat.» / «w/»)
-    if (t === a) return true;
+    // 1. точное совпадение «скелетов» (без регистра, знаков, «x Артист» / «+ Артист» / «feat.» / «w/»),
+    // в том числе без пробелов: «млд» = «м.л.д.», «djsnake» = «DJ Snake»
+    if (t === a || t.replace(/ /g, '') === aCompact) return true;
 
     // 2. небольшие опечатки в названиях из 6+ символов с той же первой буквой
     const budget = typoBudget(t.length);
