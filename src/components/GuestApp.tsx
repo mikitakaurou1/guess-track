@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useGuestRoom } from '../hooks/useRoom';
 import { useGuestAudio } from '../hooks/useGuestAudio';
 import type { SoundCloudPlayer } from '../services/SoundCloudPlayer';
@@ -10,6 +10,9 @@ export default function GuestApp({ player, initialCode, onBack }: Props) {
   const g = useGuestRoom();
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem('guestSound') !== 'off');
   const { resync, audioState } = useGuestAudio(player, g.snapshot, soundOn && g.status === 'joined', g.go, key => g.send({ k: 'ready', key }));
+  const rsSeed = g.snapshot?.rs?.seed ?? null;
+  const rsClip = g.snapshot?.rs?.clipMs ?? 0;
+  useLayoutEffect(() => { player?.setStartMode(rsSeed === null ? undefined : { seed: rsSeed, clipMs: rsClip }); }, [player, rsSeed, rsClip]);
   // Момент, когда у гостя загорелась кнопка в текущем окне нажатия: от него считаем время реакции
   const litWin = useRef<string | null>(null);
   const litAt = useRef(0);
