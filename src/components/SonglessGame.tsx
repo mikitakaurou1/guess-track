@@ -7,7 +7,7 @@ import Icon from './Icon';
 import FinalScreen from './FinalScreen';
 import '../styles/songless.css';
 
-// Режим «Сонглесс» (идея: songless.ru). Играется на одном устройстве, игроки ходят по очереди.
+// Режим «Сонглесс» (идея: songless.ru). Одиночный режим на одном устройстве.
 // Отрезки с начала трека и баллы за угадывание с соответствующей попытки:
 const CLIPS_MS = [500, 1000, 2000, 5000, 10000, 20000];
 const POINTS = [6, 5, 4, 3, 2, 1];
@@ -246,8 +246,6 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const cur = round % N;
   const turns = Math.floor((total - cur + N - 1) / N);
   const art = info?.artwork ? info.artwork.replace('-large', '-t300x300') : '';
-  const nextMs = CLIPS_MS[Math.min(stage + 1, CLIPS_MS.length - 1)];
-  const skipLabel = stage < CLIPS_MS.length - 1 ? `Пропустить · ${clipLabel(nextMs)}` : 'Пропустить';
 
   return <section className='glass sl'>
     <div className='sl-head'>
@@ -274,7 +272,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
       <div className='sl-fill-wrap'><div key={clip.key} className={`sl-fill ${clip.state}`} style={clip.state === 'run' ? { animationDuration: `${clip.ms}ms` } : undefined}/></div>
       <div className='sl-actions'>
         <button className='btn btn-ghost' onClick={() => void startClip(round, stage, false)}><Icon name='play' size={16}/> Послушать</button>
-        <button className='btn btn-ghost' onClick={() => advance({ kind: 'skip' })}><Icon name='skip' size={16}/> {skipLabel}</button>
+        <button className='btn btn-ghost' onClick={() => advance({ kind: 'skip' })}><Icon name='skip' size={16}/> Пропустить</button>
         <button className={`btn ${silent ? 'btn-primary' : 'btn-ghost'}`} onClick={noSound}><Icon name='mute' size={16}/> Нет звука</button>
         <button className='btn btn-primary' onClick={submit} disabled={!text.trim()}>Ответить</button>
       </div>
