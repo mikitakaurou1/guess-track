@@ -2,10 +2,10 @@
 .sl-icon-btn { width: 44px; height: 44px; flex: none; border-radius: 14px; border: 1px solid var(--glass-b); background: rgba(255, 255, 255, 0.07); color: var(--txt); display: grid; place-items: center; cursor: pointer; transition: 0.2s; }
 .sl-icon-btn:hover { background: rgba(255, 255, 255, 0.14); }
 .sl-title { text-align: center; line-height: 1.1; min-width: 0; }
-.sl-title b { font-size: 28px; font-weight: 800; font-style: italic; letter-spacing: -0.5px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sl-title b { display: inline-block; padding: 0.06em 0.18em 0.06em 0.06em; font-size: 28px; font-weight: 800; font-style: italic; letter-spacing: -0.5px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sl-title span { display: block; margin-top: 4px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--mut); font-weight: 700; }
 .sl-score { text-align: right; line-height: 1; flex: none; }
-.sl-score b { font-size: 32px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sl-score b { display: inline-block; padding: 0.06em 0.18em 0.06em 0.06em; font-size: 32px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sl-score i { margin-left: 4px; font-size: 12px; color: var(--mut); font-weight: 700; }
 .sl-score span { display: block; margin-top: 4px; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--mut); font-weight: 700; }
 .sl-turn { text-align: center; color: var(--mut); }
@@ -37,7 +37,7 @@
 .sl-card-artist { max-width: 100%; color: var(--mut); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sl-listen { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 14px; }
 .sl-card-points { flex: none; text-align: center; line-height: 1; }
-.sl-card-points b { display: block; font-size: 36px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sl-card-points b { display: inline-block; padding: 0.06em 0.18em 0.06em 0.06em; font-size: 36px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sl-card-points span { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--mut); font-weight: 700; }
 .sl-card-points.zero b { background: none; color: var(--mut); }
 @media (max-width: 600px) {
