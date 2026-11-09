@@ -1,6 +1,7 @@
 import { API_BASE } from '../config';
 
-export interface PlaylistInfo { title: string; creator: string; artwork: string | null; }
+export interface PlaylistTrack { title: string; artist: string; }
+export interface PlaylistInfo { title: string; creator: string; artwork: string | null; tracks?: PlaylistTrack[]; }
 
 const KEY = 'guesstrack:playlist-info:';
 const TTL = 30 * 24 * 60 * 60 * 1000;
@@ -43,7 +44,12 @@ async function viaServer(url: string, signal: AbortSignal): Promise<PlaylistInfo
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const b = await r.json();
   const art = typeof b.artwork === 'string' && b.artwork.startsWith('https://') ? b.artwork : null;
-  return { title: typeof b.title === 'string' ? b.title : '', creator: typeof b.creator === 'string' ? b.creator : '', artwork: art };
+  const tracks: PlaylistTrack[] | undefined = Array.isArray(b.tracks)
+    ? b.tracks
+        .filter((t: { title?: unknown }) => t && typeof t.title === 'string')
+        .map((t: { title: string; artist?: unknown }) => ({ title: t.title, artist: typeof t.artist === 'string' ? t.artist : '' }))
+    : undefined;
+  return { title: typeof b.title === 'string' ? b.title : '', creator: typeof b.creator === 'string' ? b.creator : '', artwork: art, tracks };
 }
 
 // Запасной путь только для названия и автора: стандартную картинку SoundCloud (логотип) не берём
