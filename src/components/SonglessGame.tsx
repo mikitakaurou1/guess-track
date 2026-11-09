@@ -225,7 +225,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     const attempts: Attempt[] = rowsBefore.flatMap(x => (x.kind === 'wrong' ? [{ playerIndex: pi, text: x.text, correct: false }] : []));
     if (correct) attempts.push({ playerIndex: pi, text: guess, correct: true });
     endClip();
-    setHistory(h => [...h, { track, result: correct ? { kind: 'correct', playerIndex: pi } : { kind: 'nobody' }, attempts }]);
+    setHistory(h => [...h, { track, result: correct ? { kind: 'correct', playerIndex: pi } : { kind: 'nobody' }, attempts, songless: { clipMs: correct ? CLIPS_MS[st] : null, points } }]);
     setScores(s => s.map((v, k) => (k === pi ? v + points : v)));
     setRows(correct ? [...rowsBefore, { kind: 'right', text: `${track.artist} — ${track.title}` }] : rowsBefore);
     setResult({ correct, points });

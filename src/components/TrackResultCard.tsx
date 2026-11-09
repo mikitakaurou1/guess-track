@@ -9,25 +9,37 @@ interface Props {
   playerNames: string[];
 }
 
+const secLabel = (ms: number) => `${String(ms / 1000).replace('.', ',')} с`;
+const pointsWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? 'очко' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'очка' : 'очков';
+
 export default function TrackResultCard({ index, record, playerNames }: Props) {
   const [open, setOpen] = useState(false);
-  const { track, result, attempts } = record;
+  const { track, result, attempts, songless } = record;
 
   const ok = result.kind === 'correct';
-  const badge =
-    result.kind === 'correct' ? (
+  const badge = songless ? (
+    ok && songless.clipMs !== null ? (
       <>
-        <Icon name="check" size={14} /> {playerNames[result.playerIndex]}
-      </>
-    ) : result.kind === 'nobody' ? (
-      <>
-        <Icon name="x" size={14} /> Никто не угадал
+        <Icon name="check" size={14} /> Угадано за {secLabel(songless.clipMs)} · +{songless.points} {pointsWord(songless.points)}
       </>
     ) : (
       <>
-        <Icon name="skip" size={14} /> Пропущен
+        <Icon name="x" size={14} /> Не угадано · 0 очков
       </>
-    );
+    )
+  ) : result.kind === 'correct' ? (
+    <>
+      <Icon name="check" size={14} /> {playerNames[result.playerIndex]}
+    </>
+  ) : result.kind === 'nobody' ? (
+    <>
+      <Icon name="x" size={14} /> Никто не угадал
+    </>
+  ) : (
+    <>
+      <Icon name="skip" size={14} /> Пропущен
+    </>
+  );
 
   const widgetSrc =
     'https://w.soundcloud.com/player/?url=' + encodeURIComponent(track.url) +
@@ -56,7 +68,7 @@ export default function TrackResultCard({ index, record, playerNames }: Props) {
         <ul className="attempts">
           {attempts.map((a, i) => (
             <li key={i} className={a.correct ? 'yes' : 'no'}>
-              <b>{playerNames[a.playerIndex]}</b>: {a.timeout ? 'не успел(а)' : `«${a.text}»`}
+              {songless ? null : <><b>{playerNames[a.playerIndex]}</b>: </>}{a.timeout ? 'не успел(а)' : `«${a.text}»`}
               <span>{a.correct ? ' — верно' : ' — неверно'}</span>
             </li>
           ))}

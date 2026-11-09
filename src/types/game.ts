@@ -3,4 +3,4 @@ export interface GameConfig { playerNames: string[]; avatars?: string[]; owners:
 export type Phase = 'setup' | 'loading' | 'playing' | 'clipDone' | 'answering' | 'reveal' | 'final';
 export interface Attempt { playerIndex: number; text: string; correct: boolean; timeout?: boolean; reactionMs?: number; answerMs?: number; }
 export type RoundResult = { kind: 'correct'; playerIndex: number } | { kind: 'nobody' } | { kind: 'skipped' };
-export interface RoundRecord { track: Track; result: RoundResult; attempts: Attempt[]; }
+export interface RoundRecord { track: Track; result: RoundResult; attempts: Attempt[]; songless?: { clipMs: number | null; points: number }; }
