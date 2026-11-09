@@ -16,7 +16,7 @@ export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, 
       .then((i) => {
         if (cancelled) return;
         if (i.artwork) cache.set(url, i);
-        setInfo((prev) => ({ ...i, artwork: i.artwork ?? prev?.artwork ?? null }));
+        setInfo((prev) => ({ ...i, artwork: i.artwork ?? prev?.artwork ?? null, tracks: i.tracks ?? prev?.tracks }));
         setImgFailed(false);
       })
       .catch(() => {});
@@ -25,8 +25,9 @@ export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, 
   const title = info?.title || fallbackTitle;
   const creator = info?.creator || fallbackCreator;
   const art = imgFailed ? null : info?.artwork ?? null;
+  const tracks = info?.tracks ?? [];
   return (
-    <div className='pl-card glass-inner'>
+    <div className={`pl-card glass-inner${tracks.length ? ' has-tracks' : ''}`}>
       {art
         ? <img className='pl-art' src={art} alt='' referrerPolicy='no-referrer' onError={() => setImgFailed(true)} />
         : <div className='pl-art pl-art-ph'><Icon name='list' size={40} /></div>}
@@ -37,6 +38,22 @@ export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, 
           {added ? <><Icon name='check-circle' size={16} /> Добавлен</> : <><Icon name='plus' size={16} /> Добавить</>}
         </button>
       </div>
+      {tracks.length > 0 && (
+        <div className='pl-tracks'>
+          <div className='pl-tracks-head'>Треки · {tracks.length}</div>
+          <ol className='pl-track-list' tabIndex={0} aria-label='Треки плейлиста'>
+            {tracks.map((t, i) => (
+              <li key={i} className='pl-track'>
+                <span className='pl-n'>{i + 1}</span>
+                <div className='pl-tx'>
+                  <div className='pl-tt'>{t.title}</div>
+                  {t.artist && <div className='pl-ta'>{t.artist}</div>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }
