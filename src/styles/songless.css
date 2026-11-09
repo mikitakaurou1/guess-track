@@ -22,27 +22,32 @@
 .sl-row.future { font-size: 13px; font-style: normal; font-weight: 600; opacity: 0.7; }
 .sl-input { width: 100%; padding: 20px 0; border: 0; outline: none; background: transparent; color: var(--txt); font: inherit; font-size: 16px; font-style: normal; font-weight: 600; text-align: center; }
 .sl-input::placeholder { color: var(--mut); font-weight: 500; }
-.sl-fill-wrap { height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 8px; overflow: hidden; }
-.sl-fill { height: 100%; width: 0; background: var(--grad); border-radius: 8px; }
-.sl-fill.run { animation: slfill linear forwards; }
-.sl-fill.done { width: 100%; }
-@keyframes slfill { from { width: 0; } to { width: 100%; } }
+.sl-timeline { position: relative; display: flex; flex-direction: column; gap: 10px; padding-top: 46px; }
+.sl-pill { position: absolute; top: 0; transform: translateX(-50%); padding: 9px 15px; border-radius: 14px; background: var(--grad); color: #fff; font-size: 14px; font-weight: 800; font-style: italic; white-space: nowrap; box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45); pointer-events: none; }
+.sl-track { position: relative; height: 30px; border-radius: 16px; border: 1px solid var(--glass-b); background: rgba(255, 255, 255, 0.05); overflow: hidden; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.sl-track-open { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.14); }
+.sl-track-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--grad); opacity: 0.9; }
+.sl-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(255, 255, 255, 0.3); pointer-events: none; }
+.sl-time { align-self: flex-end; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; font-weight: 800; font-style: italic; letter-spacing: 0.02em; color: var(--c); }
+.sl-time i { margin: 0 6px; color: var(--mut); font-style: normal; }
 .sl-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .sl-actions .btn { flex: 1; min-width: 140px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-align: center; }
-.sl-card { display: flex; align-items: center; gap: 16px; padding: 16px; border-radius: 22px; border: 1px solid var(--glass-b); background: rgba(255, 255, 255, 0.04); }
-.sl-art { width: 92px; height: 92px; flex: none; border-radius: 18px; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
+.sl-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 22px; width: 100%; padding: 22px; border-radius: 24px; border: 1px solid var(--glass-b); background: rgba(255, 255, 255, 0.05); }
+.sl-art { width: 120px; height: 120px; flex: none; border-radius: 20px; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
 .sl-art-empty { display: grid; place-items: center; color: var(--mut); }
-.sl-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.sl-card-title { max-width: 100%; font-size: 18px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sl-card-artist { max-width: 100%; color: var(--mut); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sl-listen { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 14px; }
-.sl-card-points { flex: none; text-align: center; line-height: 1; }
-.sl-card-points b { display: inline-block; padding: 0.06em 0.18em 0.06em 0.06em; font-size: 36px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sl-card-info { min-width: 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.sl-card-title { font-size: 24px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.sl-card-artist { color: var(--mut); font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.sl-listen { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 10px 18px; font-size: 15px; }
+.sl-card-points { flex: none; text-align: center; line-height: 1; padding-left: 8px; }
+.sl-card-points b { display: inline-block; padding: 0.06em 0.18em 0.06em 0.06em; font-size: 42px; font-weight: 800; font-style: italic; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sl-card-points span { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--mut); font-weight: 700; }
 .sl-card-points.zero b { background: none; color: var(--mut); }
 @media (max-width: 600px) {
   .sl-title b { font-size: 22px; }
-  .sl-art { width: 72px; height: 72px; }
-  .sl-card { gap: 12px; padding: 12px; }
-  .sl-card-points b { font-size: 28px; }
+  .sl-card { gap: 14px; padding: 16px; }
+  .sl-art { width: 84px; height: 84px; border-radius: 16px; }
+  .sl-card-title { font-size: 18px; }
+  .sl-card-artist { font-size: 15px; }
+  .sl-card-points b { font-size: 30px; }
 }

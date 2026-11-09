@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as RPointerEvent } from 'react';
 import type { Attempt, GameConfig, RoundRecord, Track } from '../types/game';
 import type { SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { isCorrectAnswer } from '../utils/answerMatcher';
@@ -10,13 +11,25 @@ import '../styles/songless.css';
 // Режим «Сонглесс» (идея: songless.ru). Одиночный режим на одном устройстве.
 // Отрезки с начала трека и баллы за угадывание с соответствующей попытки:
 const CLIPS_MS = [500, 1000, 2000, 5000, 10000, 20000];
+const TOTAL_MS = CLIPS_MS[CLIPS_MS.length - 1];
 const POINTS = [6, 5, 4, 3, 2, 1];
 const clipLabel = (ms: number) => `${String(ms / 1000).replace('.', ',')} с`;
 const pointsWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? 'очко' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'очка' : 'очков';
+// Время в виде м:сс.д
+const fmtT = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${Math.floor(ms / 100) % 10}`;
+
+// Перемотка: у SoundCloudPlayer нет публичной перемотки на произвольную позицию, поэтому идём к виджету напрямую
+const seekPlay = (p: SoundCloudPlayer, ms: number) => {
+  const w = (p as unknown as { widget: SCWidget }).widget;
+  w.seekTo(ms);
+  w.play();
+};
 
 type Row = { kind: 'skip' } | { kind: 'wrong'; text: string } | { kind: 'right'; text: string };
 type Phase = 'loading' | 'guess' | 'reveal' | 'error' | 'final';
 type Clip = { key: number; ms: number; state: 'idle' | 'run' | 'done' };
+type Await = { token: number; ms: number; idx: number; from: number; limit: number };
+type Run = { t0: number; from: number; limit: number };
 type Preload = { round: number; idx: number; promise: Promise<Track | null | undefined> };
 
 // Выбор треков: поровну с каждого источника, остальные уходят в запас (на случай, если трек не загрузится)
@@ -64,10 +77,13 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const [clip, setClip] = useState<Clip>({ key: 0, ms: CLIPS_MS[0], state: 'idle' });
   const [silent, setSilent] = useState(false);
   const [notice, setNotice] = useState('');
+  const [pos, setPos] = useState(0);
+  const [scrub, setScrub] = useState<number | null>(null);
 
   const live = useRef({ round: 0, stage: 0, rows: [] as Row[], phase: 'loading' as Phase, info: null as Track | null });
   live.current = { round, stage, rows, phase, info };
-  const awaitRef = useRef<{ token: number; ms: number; idx: number } | null>(null);
+  const awaitRef = useRef<Await | null>(null);
+  const runRef = useRef<Run | null>(null);
   const tokenRef = useRef(0);
   const loadRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,6 +91,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const preloadRef = useRef<Preload | null>(null);
   const startedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const endClipRef = useRef<() => void>(() => {});
 
   const clearTimers = () => {
@@ -84,6 +101,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const endClip = () => {
     clearTimers();
     awaitRef.current = null;
+    runRef.current = null;
     setClip(c => (c.state === 'run' ? { ...c, state: 'done' } : c));
   };
   endClipRef.current = endClip;
@@ -97,26 +115,47 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
       awaitRef.current = null;
       clearTimers();
       setSilent(false);
+      runRef.current = { t0: performance.now(), from: aw.from, limit: aw.limit };
       setClip(c => ({ key: c.key + 1, ms: aw.ms, state: 'run' }));
-      timerRef.current = setTimeout(() => { players[i].pause(); endClipRef.current(); }, aw.ms);
+      timerRef.current = setTimeout(() => { players[i].pause(); setPos(aw.limit); endClipRef.current(); }, aw.ms);
     }));
     return () => offs.forEach(off => off());
   }, [players]);
 
-  const startClip = async (r: number, st: number, first: boolean) => {
+  // Бегунок на линии трека обновляется, пока звучит отрезок
+  useEffect(() => {
+    if (clip.state !== 'run') return;
+    let raf = 0;
+    const tick = () => {
+      const r = runRef.current;
+      if (r) setPos(Math.min(r.limit, r.from + (performance.now() - r.t0)));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [clip.state, clip.key]);
+
+  // from: с какого места (мс) играть; звучит до конца открытого отрезка
+  const startClip = async (r: number, st: number, first: boolean, from = 0) => {
     const p = players?.[r % 2];
     if (!p) return;
     clearTimers();
+    runRef.current = null;
     const token = ++tokenRef.current;
-    awaitRef.current = { token, ms: CLIPS_MS[st], idx: r % 2 };
+    const limit = CLIPS_MS[st];
+    const ms = Math.max(100, limit - from);
+    awaitRef.current = { token, ms, idx: r % 2, from, limit };
     setSilent(false);
-    setClip(c => ({ key: c.key, ms: CLIPS_MS[st], state: 'idle' }));
+    setPos(from);
+    setClip(c => ({ key: c.key, ms, state: 'idle' }));
     // Если плеер так и не начал играть, считаем, что у трека нет звука
-    safetyRef.current = setTimeout(() => { p.pause(); endClipRef.current(); setSilent(true); }, CLIPS_MS[st] + 4000);
+    safetyRef.current = setTimeout(() => { p.pause(); endClipRef.current(); setSilent(true); }, ms + 4000);
     if (first) {
       const ok = await p.startPrepared(false);
       if (token !== tokenRef.current) return;
       if (!ok) { endClipRef.current(); setSilent(true); }
+    } else if (from > 0) {
+      seekPlay(p, from);
     } else {
       p.playFromStart();
     }
@@ -131,7 +170,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const loadRound = async (r: number) => {
     const my = ++loadRef.current;
     setRound(r); setPhase('loading'); setStage(0); setRows([]); setText(''); setResult(null); setInfo(null);
-    setSilent(false); setNotice('');
+    setSilent(false); setNotice(''); setPos(0); setScrub(null);
     setClip({ key: 0, ms: CLIPS_MS[0], state: 'idle' });
     let tries = 0;
     for (;;) {
@@ -240,12 +279,36 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     void loadRound(r + 1);
   };
 
+  // Время (мс) под курсором на линии трека; дальше открытого предела перемотать нельзя
+  const timeAt = (clientX: number) => {
+    const el = barRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Math.max(0, Math.min(frac * TOTAL_MS, CLIPS_MS[live.current.stage] - 100));
+  };
+  const onBarDown = (e: RPointerEvent<HTMLDivElement>) => {
+    if (live.current.phase !== 'guess') return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setScrub(timeAt(e.clientX));
+  };
+  const onBarMove = (e: RPointerEvent<HTMLDivElement>) => { if (scrub !== null) setScrub(timeAt(e.clientX)); };
+  const onBarUp = (e: RPointerEvent<HTMLDivElement>) => {
+    if (scrub === null) return;
+    const t = timeAt(e.clientX);
+    setScrub(null);
+    const L = live.current;
+    if (L.phase === 'guess') void startClip(L.round, L.stage, false, t < 30 ? 0 : Math.round(t));
+  };
+
   if (phase === 'final') return <FinalScreen names={names} avatars={config.avatars} scores={scores} history={history} onRestart={onExit}/>;
   if (!players) return <section className='glass center-text'><h2>Подключаем SoundCloud...</h2><button className='btn btn-ghost' onClick={onExit}>Назад</button></section>;
 
   const cur = round % N;
   const turns = Math.floor((total - cur + N - 1) / N);
   const art = info?.artwork ? info.artwork.replace('-large', '-t300x300') : '';
+  const limit = CLIPS_MS[stage];
+  const shown = Math.min(scrub ?? pos, limit);
 
   return <section className='glass sl'>
     <div className='sl-head'>
@@ -269,7 +332,15 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     {notice && <div className='toast bad'>{notice}</div>}
     {phase === 'guess' && silent && <div className='toast bad'>Похоже, звука нет. Нажмите «Нет звука» — трек заменится на другой.</div>}
     {phase === 'guess' && <>
-      <div className='sl-fill-wrap'><div key={clip.key} className={`sl-fill ${clip.state}`} style={clip.state === 'run' ? { animationDuration: `${clip.ms}ms` } : undefined}/></div>
+      <div className='sl-timeline'>
+        <div className='sl-pill' style={{ left: `clamp(28px, ${(limit / TOTAL_MS) * 100}%, calc(100% - 28px))` }}>{clipLabel(limit)}</div>
+        <div className='sl-track' ref={barRef} onPointerDown={onBarDown} onPointerMove={onBarMove} onPointerUp={onBarUp} onPointerCancel={() => setScrub(null)}>
+          <div className='sl-track-open' style={{ width: `${(limit / TOTAL_MS) * 100}%` }}/>
+          <div className='sl-track-fill' style={{ width: `${(shown / TOTAL_MS) * 100}%` }}/>
+          {CLIPS_MS.slice(0, -1).map(ms => <div key={ms} className='sl-tick' style={{ left: `${(ms / TOTAL_MS) * 100}%` }}/>)}
+        </div>
+        <div className='sl-time'>{fmtT(shown)}<i>/</i>{fmtT(limit)}</div>
+      </div>
       <div className='sl-actions'>
         <button className='btn btn-ghost' onClick={() => void startClip(round, stage, false)}><Icon name='play' size={16}/> Послушать</button>
         <button className='btn btn-ghost' onClick={() => advance({ kind: 'skip' })}><Icon name='skip' size={16}/> Пропустить</button>
@@ -279,7 +350,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     </>}
     {phase === 'reveal' && info && result && <>
       <div className='sl-card'>
-        {art ? <img className='sl-art' src={art} alt=''/> : <div className='sl-art sl-art-empty'><Icon name='disc' size={40}/></div>}
+        {art ? <img className='sl-art' src={art} alt=''/> : <div className='sl-art sl-art-empty'><Icon name='disc' size={48}/></div>}
         <div className='sl-card-info'>
           <div className='sl-card-title'>{info.title}</div>
           <div className='sl-card-artist'>{info.artist}</div>
