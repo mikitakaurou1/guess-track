@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RoundRecord, Track } from '../types/game';
+import type { SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { API_BASE } from '../config';
 import { shuffle } from '../utils/shuffle';
 import { isCorrectAnswer } from '../utils/answerMatcher';
@@ -10,7 +11,16 @@ const BASE = String(import.meta.env.VITE_REVERSE_API_URL || API_BASE).replace(/\
 type Session = { tracks: Track[]; reserve: Track[]; seconds: number };
 type Phase = 'loading' | 'ready' | 'reveal' | 'error' | 'final';
 
-export default function ReverseGame({ playlist, onExit }: { playlist: Track[]; onExit: () => void }) {
+function permalink(raw: string): string | null {
+  try {
+    const u = new URL(raw.trim());
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (!['http:', 'https:'].includes(u.protocol) || !['soundcloud.com', 'www.soundcloud.com'].includes(u.hostname) || u.port || u.username || u.password || parts.length !== 2 || ['sets', 'likes', 'tracks', 'albums', 'popular-tracks'].includes(parts[1])) return null;
+    return `https://soundcloud.com/${parts.join('/')}`;
+  } catch { return null; }
+}
+
+export default function ReverseGame({ playlist, player, onExit }: { playlist: Track[]; player: SoundCloudPlayer | null; onExit: () => void }) {
   const [seconds, setSeconds] = useState(10);
   const [count, setCount] = useState(Math.min(10, playlist.length));
   const [session, setSession] = useState<Session | null>(null);
@@ -23,21 +33,44 @@ export default function ReverseGame({ playlist, onExit }: { playlist: Track[]; o
   const [audioUrl, setAudioUrl] = useState('');
   const [history, setHistory] = useState<RoundRecord[]>([]);
   const [score, setScore] = useState(0);
+  const [resolved, setResolved] = useState<Track | null>(null);
+  const cache = useRef(new Map<number, Track>());
   const audio = useRef<HTMLAudioElement>(null);
   const submitted = useRef(false);
   const track = session?.tracks[round];
+  const currentTrack = resolved ?? track;
 
   useEffect(() => {
     if (!session || !track) return;
     const controller = new AbortController();
     let active = true;
     let objectUrl = '';
+    let resolving = false;
     const timer = setTimeout(() => controller.abort(), 185000);
     submitted.current = false;
-    setPhase('loading'); setText(''); setError(''); setNotice(''); setAudioUrl('');
+    setPhase('loading'); setText(''); setError(''); setNotice(''); setAudioUrl(''); setResolved(null);
     (async () => {
       try {
-        const query = new URLSearchParams({ url: track.url, seconds: String(session.seconds) });
+        let info = cache.current.get(track.id) ?? track;
+        let url = permalink(info.url);
+        if (!url) {
+          if (!player) throw new Error('Плеер SoundCloud ещё не готов. Нажмите «Повторить загрузку».');
+          player.setStartMode(undefined);
+          resolving = true;
+          const fetched = await player.prepareTrack(track, false);
+          resolving = false;
+          if (!active || controller.signal.aborted) return;
+          player.detach();
+          if (!fetched || fetched.id !== track.id) throw new Error('Не удалось получить данные этого трека по ID. Повторите загрузку или замените трек.');
+          url = permalink(fetched.url);
+          info = { ...track, title: fetched.title || track.title, artist: fetched.artist || track.artist, artwork: fetched.artwork || track.artwork, url: url ?? '' };
+        }
+        if (!url) throw new Error('SoundCloud не вернул полную ссылку на этот трек. Нажмите «Заменить трек».');
+        if (!active || controller.signal.aborted) return;
+        info = { ...info, url };
+        cache.current.set(track.id, info);
+        setResolved(info);
+        const query = new URLSearchParams({ url, seconds: String(session.seconds) });
         const response = await fetch(`${BASE}/api/reverse?${query}`, { signal: controller.signal });
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
@@ -54,8 +87,8 @@ export default function ReverseGame({ playlist, onExit }: { playlist: Track[]; o
         setPhase('error');
       } finally { clearTimeout(timer); }
     })();
-    return () => { active = false; controller.abort(); clearTimeout(timer); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [session, track, round, retry]);
+    return () => { active = false; controller.abort(); clearTimeout(timer); if (resolving) player?.detach(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [session, track, round, retry, player]);
 
   useEffect(() => {
     if (phase !== 'ready' || !audioUrl) return;
@@ -69,11 +102,11 @@ export default function ReverseGame({ playlist, onExit }: { playlist: Track[]; o
     setRound(0); setHistory([]); setScore(0);
   };
   const finish = (skip: boolean) => {
-    if (phase !== 'ready' || !track || submitted.current || (!skip && !text.trim())) return;
+    if (phase !== 'ready' || !currentTrack || submitted.current || (!skip && !text.trim())) return;
     submitted.current = true;
     audio.current?.pause();
-    const correct = !skip && isCorrectAnswer(text.trim(), track.title);
-    setHistory(h => [...h, { track, result: correct ? { kind: 'correct', playerIndex: 0 } : { kind: 'skipped' }, attempts: skip ? [] : [{ playerIndex: 0, text: text.trim(), correct }] }]);
+    const correct = !skip && isCorrectAnswer(text.trim(), currentTrack.title);
+    setHistory(h => [...h, { track: currentTrack, result: correct ? { kind: 'correct', playerIndex: 0 } : { kind: 'skipped' }, attempts: skip ? [] : [{ playerIndex: 0, text: text.trim(), correct }] }]);
     if (correct) setScore(s => s + 1);
     setPhase('reveal');
   };
@@ -97,12 +130,12 @@ export default function ReverseGame({ playlist, onExit }: { playlist: Track[]; o
   if (phase === 'final') return <><FinalScreen names={['Игрок']} scores={[score]} history={history} onRestart={() => setSession(null)}/><button className='btn btn-ghost' onClick={onExit}>К режимам</button></>;
   return <section className='glass'>
     <div className='row between'><h2>Перевертыш</h2><span>Трек {round + 1} / {session.tracks.length} · {score} очков</span></div>
-    {phase === 'loading' && <p className='muted'>Загружаем и переворачиваем отрывок… Это может занять несколько минут.</p>}
+    {phase === 'loading' && <p className='muted'>Получаем ссылку SoundCloud, загружаем и переворачиваем отрывок… Это может занять несколько минут.</p>}
     {phase === 'error' && <><div className='error'>{error}</div><div className='row'><button className='btn btn-primary' onClick={() => setRetry(n => n + 1)}>Повторить загрузку</button><button className='btn btn-ghost' onClick={replace}>Заменить трек</button></div></>}
     {notice && <p className='muted small'>{notice}</p>}
     {audioUrl && <audio ref={audio} src={audioUrl} controls preload='auto' style={{ width: '100%' }} onError={() => { setError('Не удалось воспроизвести подготовленный отрывок.'); setPhase('error'); }}/>}
     {phase === 'ready' && <><p className='muted'>Обратный отрывок · до {session.seconds} с</p><form className='answer-form' onSubmit={e => { e.preventDefault(); finish(false); }}><input className='input' aria-label='Название трека' placeholder='Название трека' value={text} onChange={e => setText(e.target.value)}/><button className='btn btn-primary' disabled={!text.trim()}>Ответить</button></form><div className='row'><button className='btn btn-ghost' onClick={() => finish(true)}>Пропустить</button><button className='btn btn-ghost' onClick={replace}>Нет звука — заменить</button></div></>}
-    {phase === 'reveal' && track && <><div className='track-card'><div className='track-head'><Cover src={track.artwork} size='sm'/><div className='track-info'><div className='track-title'>{track.title}</div><div className='muted'>{track.artist}</div></div><span className='badge'>{history[history.length - 1]?.result.kind === 'correct' ? '+1 балл' : '0 баллов'}</span></div></div><button className='btn btn-primary btn-lg' onClick={() => { setAudioUrl(''); if (round + 1 === session.tracks.length) setPhase('final'); else setRound(r => r + 1); }}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button></>}
+    {phase === 'reveal' && currentTrack && <><div className='track-card'><div className='track-head'><Cover src={currentTrack.artwork} size='sm'/><div className='track-info'><div className='track-title'>{currentTrack.title}</div><div className='muted'>{currentTrack.artist}</div></div><span className='badge'>{history[history.length - 1]?.result.kind === 'correct' ? '+1 балл' : '0 баллов'}</span></div></div><button className='btn btn-primary btn-lg' onClick={() => { setAudioUrl(''); if (round + 1 === session.tracks.length) setPhase('final'); else setRound(r => r + 1); }}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button></>}
     <button className='btn btn-ghost' onClick={onExit}>Выйти в настройки</button>
   </section>;
 }
