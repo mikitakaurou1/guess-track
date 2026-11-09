@@ -44,6 +44,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     }; tick();
   });
 
+  // ---- Замер времени ответа: от момента, когда игрок начал отвечать, до отправки ответа ----
+  const answerStartRef = useRef(0);
+  useEffect(() => { if (state.phase === 'answering') answerStartRef.current = performance.now(); }, [state.phase, state.current]);
+  const answerMs = useCallback(() => Math.max(0, Math.round(performance.now() - answerStartRef.current)), []);
+
   // ---- Справедливый выбор первого нажавшего (с поправкой на задержку сети) ----
   const rttRef = useRef(new RttTracker()); // пинг каждого гостя
   const pingSentRef = useRef(new Map<number, number>()); // номер замера -> время отправки
@@ -65,7 +70,8 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     candsRef.current = []; candWinRef.current = null;
     const s = stateRef.current;
     if (!cands.length || s.phase !== 'playing' || windowKey(s) !== win) return;
-    dispatch({ type: 'BUZZ', player: pickWinner(cands).player });
+    const winner = pickWinner(cands);
+    dispatch({ type: 'BUZZ', player: winner.player, reactionMs: Math.round(winner.r) });
   }, []);
 
   // owner: id гостя или null (нажал хозяин); reported: время реакции, присланное гостем; win: номер окна, присланный гостем
@@ -276,20 +282,20 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   }, [playlist]);
   // Нажатие хозяина идёт через общий выбор первого нажавшего (без гостей решение принимается сразу)
   const buzz = useCallback((p: number) => enqueueBuzz(p, null), [enqueueBuzz]);
-  const submitAnswer = useCallback((text: string) => dispatch({ type: 'ANSWER', text }), []);
+  const submitAnswer = useCallback((text: string) => dispatch({ type: 'ANSWER', text, ms: answerMs() }), [answerMs]);
   const handleRemote = useCallback((guestId: string, data: any) => {
     const s = stateRef.current; const owners = s.config?.owners; if (!owners) return;
     if (data?.k === 'buzz') {
       const p = Number(data.player);
       if (Number.isInteger(p) && p >= 0 && p < owners.length && owners[p] === guestId) enqueueBuzz(p, guestId, data.r, typeof data.win === 'string' ? data.win : undefined);
     }
-    else if (data?.k === 'answer') { if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200) }); }
+    else if (data?.k === 'answer') { if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200), ms: answerMs() }); }
     else if (data?.k === 'ready') { const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set); }
     else if (data?.k === 'hpong') { const sent = pingSentRef.current.get(Number(data.n)); if (sent !== undefined) rttRef.current.add(guestId, performance.now() - sent); }
-  }, [enqueueBuzz]);
+  }, [enqueueBuzz, answerMs]);
   return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, nextBusy, loadSources, nextPing,
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
-    answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT' }), []), skip: () => dispatch({ type: 'SKIP' }),
+    answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT', ms: answerMs() }), [answerMs]), skip: () => dispatch({ type: 'SKIP' }),
     next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true); dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
   };
 }

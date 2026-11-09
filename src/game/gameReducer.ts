@@ -12,6 +12,7 @@ export interface GameState {
   scores: number[];
   locked: number[];
   current: number | null;
+  reactionMs: number | null; // время реакции игрока, который сейчас отвечает
   resumePlaying: boolean;
   result: RoundResult | null;
   attempts: Attempt[];
@@ -29,9 +30,9 @@ export type GameAction =
   | { type: 'TRACK_FAILED'; attempt: number }
   | { type: 'RETRY' }
   | { type: 'CLIP_ENDED' }
-  | { type: 'BUZZ'; player: number }
-  | { type: 'ANSWER'; text: string }
-  | { type: 'TIMEOUT' }
+  | { type: 'BUZZ'; player: number; reactionMs?: number }
+  | { type: 'ANSWER'; text: string; ms?: number }
+  | { type: 'TIMEOUT'; ms?: number }
   | { type: 'SKIP' }
   | { type: 'NEXT' }
   | { type: 'FINISH' }
@@ -47,6 +48,7 @@ export const initialState: GameState = {
   scores: [],
   locked: [],
   current: null,
+  reactionMs: null,
   resumePlaying: false,
   result: null,
   attempts: [],
@@ -75,6 +77,7 @@ function endRound(
     result,
     attempts,
     current: null,
+    reactionMs: null,
     history: track ? [...state.history, { track, result, attempts }] : state.history,
   };
 }
@@ -101,6 +104,7 @@ function handleAnswer(state: GameState, attempt: Attempt): GameState {
     attempts,
     locked,
     current: null,
+    reactionMs: null,
     lastAttempt: attempt,
     phase: state.resumePlaying ? 'playing' : 'clipDone',
   };
@@ -206,6 +210,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         phase: 'answering',
         current: action.player,
+        reactionMs: action.reactionMs ?? null,
         resumePlaying: true,
         lastAttempt: null,
       };
@@ -219,12 +224,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         playerIndex: state.current,
         text: action.text.trim(),
         correct,
+        reactionMs: state.reactionMs ?? undefined,
+        answerMs: action.ms,
       });
     }
 
     case 'TIMEOUT':
       if (state.current === null) return state;
-      return handleAnswer(state, { playerIndex: state.current, text: '', correct: false, timeout: true });
+      return handleAnswer(state, {
+        playerIndex: state.current,
+        text: '',
+        correct: false,
+        timeout: true,
+        reactionMs: state.reactionMs ?? undefined,
+        answerMs: action.ms,
+      });
 
     case 'SKIP':
       if (state.phase !== 'playing' && state.phase !== 'clipDone') return state;
