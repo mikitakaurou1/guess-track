@@ -3,6 +3,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 
 const PORT = process.env.PORT ?? 3001;
+const MAX_GUESTS = 10;
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -225,7 +226,7 @@ wss.on('connection', (ws) => {
       const room = rooms.get(code);
       if (!room) return send(ws, { t: 'error', message: 'Комната не найдена' });
       if (!room.open) return send(ws, { t: 'error', message: 'Игра уже идёт — подключиться нельзя' });
-      if (room.guests.size >= 5) return send(ws, { t: 'error', message: 'Комната заполнена' });
+      if (room.guests.size >= MAX_GUESTS) return send(ws, { t: 'error', message: 'Комната заполнена' });
 
       const id = String(nextId++);
       const name = String(m.name ?? '').trim().slice(0, 20) || `Гость ${id}`;
