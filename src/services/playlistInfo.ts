@@ -3,7 +3,8 @@ import { API_BASE } from '../config';
 export interface PlaylistInfo { title: string; creator: string; artwork: string | null; }
 
 const KEY = 'guesstrack:playlist-info:';
-const TTL = 24 * 60 * 60 * 1000;
+const TTL = 30 * 24 * 60 * 60 * 1000;
+const DELAYS = [0, 2000, 4000, 8000, 15000, 20000, 30000, 45000];
 
 export function readCachedInfo(url: string): PlaylistInfo | null {
   try {
@@ -24,6 +25,8 @@ function saveCachedInfo(url: string, info: PlaylistInfo) {
     /* хранилище недоступно */
   }
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 async function withTimeout<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const ctrl = new AbortController();
@@ -56,11 +59,13 @@ async function viaOembed(url: string, signal: AbortSignal): Promise<PlaylistInfo
   return { title, creator: author, artwork: art };
 }
 
-// Сервер может «просыпаться» долго, поэтому даём ему до 30 секунд и две попытки
-export async function fetchPlaylistInfo(url: string): Promise<PlaylistInfo> {
-  for (let attempt = 0; attempt < 2; attempt++) {
+// Сервер может быть недоступен (перезапуск, «пробуждение»): повторяем с нарастающими паузами примерно до двух минут
+export async function fetchPlaylistInfo(url: string, isCancelled: () => boolean = () => false): Promise<PlaylistInfo> {
+  for (const delay of DELAYS) {
+    if (delay) await sleep(delay);
+    if (isCancelled()) throw new Error('cancelled');
     try {
-      const info = await withTimeout(30000, (s) => viaServer(url, s));
+      const info = await withTimeout(15000, (s) => viaServer(url, s));
       saveCachedInfo(url, info);
       return info;
     } catch {

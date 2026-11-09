@@ -12,8 +12,13 @@ export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, 
   useEffect(() => {
     if (cache.has(url)) return;
     let cancelled = false;
-    fetchPlaylistInfo(url)
-      .then((i) => { cache.set(url, i); if (!cancelled) { setInfo(i); setImgFailed(false); } })
+    fetchPlaylistInfo(url, () => cancelled)
+      .then((i) => {
+        if (cancelled) return;
+        if (i.artwork) cache.set(url, i);
+        setInfo((prev) => ({ ...i, artwork: i.artwork ?? prev?.artwork ?? null }));
+        setImgFailed(false);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [url]);
