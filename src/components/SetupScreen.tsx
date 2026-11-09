@@ -11,6 +11,7 @@ import '../styles/setupExtras.css';
 interface Props { ready: boolean; busy: boolean; error: string | null; playlist: Track[]; sources: SourceStat[]; room: HostRoom; onLoadSources: (urls: string[]) => void; onChangePlaylist: () => void; onStart: (config: GameConfig) => void; onJoinMode: () => void; }
 const FEATURED_URL = 'https://soundcloud.com/nikitkakovrov4/sets/guesstrack';
 const FEATURED_MATCH = 'nikitkakovrov4/sets/guesstrack';
+const MAX_PLAYERS = 10;
 const toNum = (s: string, min: number, max: number, fallback: number) => { const n = parseInt(s, 10); return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n)); };
 const playersWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? 'игрок' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'игрока' : 'игроков';
 function NumberField({ value, onChange, min, max }: { value: string; onChange: (v: string) => void; min: number; max: number }) {
@@ -21,8 +22,8 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const [localError, setLocalError] = useState('');
   const [howtoOpen, setHowtoOpen] = useState(false);
   const [localCount, setLocalCount] = useState(1);
-  const [names, setNames] = useState(['Игрок 1', 'Игрок 2', 'Игрок 3', 'Игрок 4', 'Игрок 5']);
-  const [avatars, setAvatars] = useState<string[]>(avatarOptions.slice(0, 5));
+  const [names, setNames] = useState<string[]>(() => Array.from({ length: MAX_PLAYERS }, (_, i) => `Игрок ${i + 1}`));
+  const [avatars, setAvatars] = useState<string[]>(() => Array.from({ length: MAX_PLAYERS }, (_, i) => avatarOptions[i % avatarOptions.length]));
   const [clipText, setClipText] = useState('10');
   const [answerText, setAnswerText] = useState('10');
   const [trackCount, setTrackCount] = useState(10);
@@ -67,7 +68,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const commitCount = () => { if (countDraft !== null && countDraft !== '') setTrackCount(Math.min(maxTotal, Math.max(S, parseInt(countDraft, 10)))); setCountDraft(null); };
   const guests = room.guests;
   const totalPlayers = localCount + guests.length;
-  const playersOk = totalPlayers >= 1 && totalPlayers <= 5;
+  const playersOk = totalPlayers >= 1 && totalPlayers <= MAX_PLAYERS;
   const joinLink = room.code ? `${location.origin}/?room=${room.code}` : '';
   const start = () => {
     const localNames = names.slice(0, localCount).map((n, i) => n.trim() || `Игрок ${i + 1}`);
@@ -82,12 +83,12 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       <div className='seg'><button className={randomOrder ? 'on' : ''} onClick={() => setRandomOrder(true)}><Icon name='shuffle' size={16}/> Случайные</button><button className={!randomOrder ? 'on' : ''} onClick={() => setRandomOrder(false)}><Icon name='list' size={16}/> По порядку</button></div>
     </div>
     <div className='grid-2'><div className='block'><div className='block-title'>Секунд фрагмента</div><NumberField value={clipText} onChange={setClipText} min={1} max={60}/></div><div className='block'><div className='block-title'>Секунд на ответ</div><NumberField value={answerText} onChange={setAnswerText} min={3} max={60}/></div></div>
-    <div className='block'><div className='block-title'>Игроков за этим устройством</div><div className='chips'>{[0, 1, 2, 3, 4, 5].map(n => <button key={n} className={`chip ${localCount === n ? 'on' : ''}`} onClick={() => setLocalCount(n)}>{n}</button>)}</div>
+    <div className='block'><div className='block-title'>Игроков за этим устройством</div><div className='chips'>{Array.from({ length: MAX_PLAYERS + 1 }, (_, n) => n).map(n => <button key={n} className={`chip ${localCount === n ? 'on' : ''}`} onClick={() => setLocalCount(n)}>{n}</button>)}</div>
       <div className='grid-names'>{names.slice(0, localCount).map((n, i) => <div key={i} className='name-field'><AvatarPicker value={avatars[i]} index={i} onChange={id => setAvatars(p => p.map((x, k) => k === i ? id : x))}/><input className='input' value={n} onChange={e => setNames(p => p.map((x, k) => k === i ? e.target.value : x))}/></div>)}</div>
-      {localCount > 0 && <p className='muted small'>Нажмите на аватарку для выбора. Клавиши быстрого ответа: 1–{localCount}.</p>}
+      {localCount > 0 && <p className='muted small'>Нажмите на аватарку для выбора. Клавиши быстрого ответа: {localCount >= 10 ? '1–9 и 0' : `1–${localCount}`}.</p>}
     </div>
     <div className='block'><div className='block-title'>Игра по сети (со своих устройств)</div>{!room.code ? <><button className='btn btn-ghost' onClick={room.open} disabled={room.connecting}><Icon name='globe' size={16}/> {room.connecting ? 'Создаём комнату...' : 'Создать комнату'}</button>{room.error && <div className='error'>{room.error}</div>}</> : <div className='glass-inner'><div className='muted small'>Код комнаты</div><div className='room-code'>{room.code}</div><div className='muted small'>Или ссылка: <a href={joinLink}>{joinLink}</a>{' '}<button className='chip' onClick={() => navigator.clipboard.writeText(joinLink)}>Копировать</button></div><ul className='attempts'>{guests.length === 0 && <li className='no'>Пока никто не подключился</li>}{guests.map((g, i) => <li key={g.id} className='yes'><span className='row'><Avatar id={g.avatar} index={localCount + i}/>{g.name}</span></li>)}</ul><button className='btn btn-ghost' onClick={room.close}>Закрыть комнату</button></div>}</div>
     <button className='btn btn-primary btn-lg' onClick={start} disabled={!playersOk}>Начать игру ({totalPlayers} {playersWord(totalPlayers)})</button>
-    {!playersOk && <p className='muted small'>Нужно от 1 до 5 игроков суммарно (сейчас {totalPlayers}).</p>}
+    {!playersOk && <p className='muted small'>Нужно от 1 до {MAX_PLAYERS} игроков суммарно (сейчас {totalPlayers}).</p>}
   </section>;
 }
