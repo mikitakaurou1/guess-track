@@ -6,7 +6,8 @@ interface Props { url: string; fallbackTitle: string; fallbackCreator: string; a
 
 const cache = new Map<string, PlaylistInfo>(); // чтобы не запрашивать заново при возврате на экран
 
-// Карточка готового плейлиста: обложка, название, автор. Если данные не пришли, показываем запасные.
+// Карточка готового плейлиста: слева обложка, справа название, автор и внизу кнопка «Добавить».
+// Если данные не пришли с сервера, показываем запасные.
 export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, added, disabled, onAdd }: Props) {
   const [info, setInfo] = useState<PlaylistInfo | null>(cache.get(url) ?? null);
   const [imgFailed, setImgFailed] = useState(false);
@@ -25,15 +26,16 @@ export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, 
     <div className='pl-card glass-inner'>
       {art
         ? <img className='pl-art' src={art} alt='' loading='lazy' referrerPolicy='no-referrer' onError={() => setImgFailed(true)} />
-        : <div className='pl-art pl-art-ph'><Icon name='list' size={28} /></div>}
+        : <div className='pl-art pl-art-ph'><Icon name='list' size={40} /></div>}
       <div className='pl-info'>
-        <div className='pl-label'>Готовый плейлист для этой игры</div>
-        <div className='pl-title'><a href={url} target='_blank' rel='noreferrer'>{title}</a></div>
-        <div className='pl-creator'>{creator}</div>
+        <div className='pl-text'>
+          <div className='pl-title'><a href={url} target='_blank' rel='noreferrer'>{title}</a></div>
+          <div className='pl-creator'>{creator}</div>
+        </div>
+        <button className='btn btn-ghost pl-add' onClick={onAdd} disabled={added || disabled}>
+          {added ? <><Icon name='check-circle' size={16} /> Добавлен</> : <><Icon name='plus' size={16} /> Добавить</>}
+        </button>
       </div>
-      <button className='btn btn-ghost' onClick={onAdd} disabled={added || disabled}>
-        {added ? <><Icon name='check-circle' size={16} /> Добавлен</> : <><Icon name='plus' size={16} /> Добавить</>}
-      </button>
     </div>
   );
 }
