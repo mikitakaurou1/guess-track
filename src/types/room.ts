@@ -8,4 +8,5 @@ export interface GuestSnapshot {
   audio: { key: string; src: string } | null;
   win?: string; // номер окна нажатия (для справедливого выбора первого нажавшего)
   hp?: { n: number }; // замер пинга: гость сразу отвечает хозяину тем же номером
+  rs?: { seed: number; clipMs: number } | null; // режим «Не с начала»: зерно игры и длина фрагмента (гость считает ту же точку старта, что и хозяин)
 }
