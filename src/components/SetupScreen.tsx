@@ -29,6 +29,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const [trackCount, setTrackCount] = useState(10);
   const [countDraft, setCountDraft] = useState<string | null>(null);
   const [randomOrder, setRandomOrder] = useState(true);
+  const [randomStart, setRandomStart] = useState(false);
   const total = playlist.length;
   const hasFeatured = urls.some(u => u.toLowerCase().includes(FEATURED_MATCH));
   const canAddFeatured = urls.some(u => !u.trim()) || urls.length < 5;
@@ -72,7 +73,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const joinLink = room.code ? `${location.origin}/?room=${room.code}` : '';
   const start = () => {
     const localNames = names.slice(0, localCount).map((n, i) => n.trim() || `Игрок ${i + 1}`);
-    onStart({ playerNames: [...localNames, ...guests.map(g => g.name)], avatars: [...avatars.slice(0, localCount), ...guests.map(g => g.avatar ?? 'panda')], owners: [...localNames.map(() => null), ...guests.map(g => g.id)], clipSeconds: toNum(clipText, 1, 60, 10), answerSeconds: toNum(answerText, 3, 60, 10), trackCount: tracks, randomOrder });
+    onStart({ playerNames: [...localNames, ...guests.map(g => g.name)], avatars: [...avatars.slice(0, localCount), ...guests.map(g => g.avatar ?? 'panda')], owners: [...localNames.map(() => null), ...guests.map(g => g.id)], clipSeconds: toNum(clipText, 1, 60, 10), answerSeconds: toNum(answerText, 3, 60, 10), trackCount: tracks, randomOrder, randomStart, startSeed: Math.floor(Math.random() * 2147483647) });
   };
   return <section className='glass'>
     <div className='row between'><div><div className='step'>Шаг 2 из 2</div><h2>Настройте игру</h2></div><button className='btn btn-ghost' onClick={onChangePlaylist}>Другие источники</button></div>
@@ -81,6 +82,10 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       <div className='chips'>{[5, 10, 20, 30, 50].filter(n => n % S === 0 && n < maxTotal).map(n => <button key={n} className={`chip ${tracks === n ? 'on' : ''}`} onClick={() => { setCountDraft(null); setTrackCount(n); }}>{n}</button>)}<button className={`chip ${tracks === maxTotal ? 'on' : ''}`} onClick={() => { setCountDraft(null); setTrackCount(maxTotal); }}>Максимум ({maxTotal})</button></div>
       {S > 1 && <ul className='attempts'>{sources.map((s, i) => <li key={i} className='yes'><b>{s.label}</b>: {s.count} треков в пуле → в игре {perSource}</li>)}</ul>}
       <div className='seg'><button className={randomOrder ? 'on' : ''} onClick={() => setRandomOrder(true)}><Icon name='shuffle' size={16}/> Случайные</button><button className={!randomOrder ? 'on' : ''} onClick={() => setRandomOrder(false)}><Icon name='list' size={16}/> По порядку</button></div>
+    </div>
+    <div className='block'><div className='block-title'>Режим</div>
+      <div className='seg'><button className={!randomStart ? 'on' : ''} onClick={() => setRandomStart(false)}>С начала</button><button className={randomStart ? 'on' : ''} onClick={() => setRandomStart(true)}>Не с начала</button></div>
+      {randomStart && <p className='muted small'>Каждый трек начинается со случайного места, у каждого трека своё.</p>}
     </div>
     <div className='grid-2'><div className='block'><div className='block-title'>Секунд фрагмента</div><NumberField value={clipText} onChange={setClipText} min={1} max={60}/></div><div className='block'><div className='block-title'>Секунд на ответ</div><NumberField value={answerText} onChange={setAnswerText} min={3} max={60}/></div></div>
     <div className='block'><div className='block-title'>Игроков за этим устройством</div><div className='chips'>{Array.from({ length: MAX_PLAYERS + 1 }, (_, n) => n).map(n => <button key={n} className={`chip ${localCount === n ? 'on' : ''}`} onClick={() => setLocalCount(n)}>{n}</button>)}</div>
