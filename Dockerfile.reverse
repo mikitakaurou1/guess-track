@@ -1,0 +1,13 @@
+FROM node:22-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/ytdlp && /opt/ytdlp/bin/pip install --no-cache-dir --upgrade yt-dlp
+ENV PATH="/opt/ytdlp/bin:${PATH}"
+ENV NODE_ENV=production
+WORKDIR /app
+RUN npm init -y && npm pkg set type=module && npm install --omit=dev express@4.21.2 && npm cache clean --force
+COPY --chown=node:node server/reverse.js ./server/reverse.js
+RUN yt-dlp --version && ffmpeg -version && ffprobe -version
+USER node
+EXPOSE 10000
+CMD ["node", "server/reverse.js"]
