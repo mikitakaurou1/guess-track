@@ -3,11 +3,13 @@ import type { GameState } from './gameReducer';
 import { selectCurrentTrack } from './gameReducer';
 import { windowKey } from './buzz';
 import { trackSrc } from '../services/SoundCloudPlayer';
+import { reverseSrc } from '../services/ReversePlayer';
 export function buildSnapshot(state: GameState, positionMs: number): GuestSnapshot {
   const c = state.config;
   const clipLeft = !c || state.phase === 'clipDone' || state.phase === 'reveal' ? 0 : Math.max(0, 1 - positionMs / (c.clipSeconds * 1000));
   const track = selectCurrentTrack(state);
   const hasAudio = !!track && ['loading', 'playing', 'clipDone', 'answering', 'reveal'].includes(state.phase);
+  const src = hasAudio ? c?.reverse ? reverseSrc(track!.url, c.clipSeconds) : trackSrc(track!) : null;
   return {
     phase: state.phase, round: state.round, total: state.order.length,
     names: c?.playerNames ?? [], avatars: c?.avatars ?? [], owners: c?.owners ?? [],
@@ -16,8 +18,9 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     clipLeft, lastAttempt: state.lastAttempt,
     reveal: state.phase === 'reveal' ? state.history[state.history.length - 1] ?? null : null,
     history: state.phase === 'final' ? state.history : null, failStreak: state.failStreak,
-    audio: hasAudio ? { key: `${state.round}:${state.order[state.round]}`, src: trackSrc(track!) } : null,
+    audio: src ? { key: `${state.round}:${state.order[state.round]}${c?.reverse ? `:${state.attempt}` : ''}`, src } : null,
     win: windowKey(state),
     rs: c?.randomStart ? { seed: c.startSeed ?? 0, clipMs: c.clipSeconds * 1000 } : null,
+    reverseSeconds: c?.reverse ? c.clipSeconds : undefined,
   };
 }

@@ -7,10 +7,7 @@ import { RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey
 import type { GameConfig, Track } from '../types/game';
 const GUEST_WAIT_MS = 4000;
 const START_TIMEOUT_MS = 6000;
-// На телефонах и планшетах браузер может не дать запустить звук без нажатия пользователя
-const TOUCH =
-  typeof window !== 'undefined' &&
-  (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
+const TOUCH = typeof window !== 'undefined' && (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
 export interface SourceStat { label: string; count: number; }
 export interface GameNet { send: (obj: unknown) => void; }
 type Preload = { round: number; trackIndex: number; ok: boolean; promise: Promise<Track | null | undefined> };
@@ -27,43 +24,38 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const [positionMs, setPositionMs] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
-  const [soundBlocked, setSoundBlocked] = useState(false); // браузер не дал запустить звук сам
-  const [preloadDone, setPreloadDone] = useState(true); // следующий трек уже загружен (или загрузка закончилась неудачей)
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const [preloadDone, setPreloadDone] = useState(true);
   const stateRef = useRef(state); stateRef.current = state;
   const playersRef = useRef(players); playersRef.current = players;
-  const preloadRef = useRef<Preload | null>(null); // следующий трек, уже загруженный во втором плеере
-  const tapStartRef = useRef<{ round: number; trackIndex: number } | null>(null); // трек уже запущен по нажатию «Дальше»
+  const preloadRef = useRef<Preload | null>(null);
+  const tapStartRef = useRef<{ round: number; trackIndex: number } | null>(null);
   const readyRef = useRef(new Map<string, Set<string>>());
   const first = players?.[0] ?? null;
   const track = selectCurrentTrack(state);
   const waitForGuests = (key: string, maxMs: number) => new Promise<void>(resolve => {
     const t0 = Date.now();
     const tick = () => {
-      const need = new Set((stateRef.current.config?.owners ?? []).filter((o): o is string => o !== null));
-      if ([...need].every(id => readyRef.current.get(key)?.has(id)) || Date.now() - t0 > maxMs) resolve(); else setTimeout(tick, 50);
+      const s = stateRef.current;
+      const currentKey = `${s.round}:${s.order[s.round]}${s.config?.reverse ? `:${s.attempt}` : ''}`;
+      const need = new Set((s.config?.owners ?? []).filter((o): o is string => o !== null));
+      if (s.phase !== 'loading' || currentKey !== key || [...need].every(id => readyRef.current.get(key)?.has(id)) || Date.now() - t0 > maxMs) resolve(); else setTimeout(tick, 50);
     }; tick();
   });
-
-  // ---- Замер времени ответа: от момента, когда игрок начал отвечать, до отправки ответа ----
   const answerStartRef = useRef(0);
   useEffect(() => { if (state.phase === 'answering') answerStartRef.current = performance.now(); }, [state.phase, state.current]);
   const answerMs = useCallback(() => Math.max(0, Math.round(performance.now() - answerStartRef.current)), []);
-
-  // ---- Справедливый выбор первого нажавшего (с поправкой на задержку сети) ----
-  const rttRef = useRef(new RttTracker()); // пинг каждого гостя
-  const pingSentRef = useRef(new Map<number, number>()); // номер замера -> время отправки
+  const rttRef = useRef(new RttTracker());
+  const pingSentRef = useRef(new Map<number, number>());
   const pingSeqRef = useRef(0);
-  const litRef = useRef<{ win: string; at: number } | null>(null); // когда у хозяина загорелись кнопки в текущем окне
-  const candsRef = useRef<BuzzCandidate[]>([]); // нажатия, ожидающие решения
+  const litRef = useRef<{ win: string; at: number } | null>(null);
+  const candsRef = useRef<BuzzCandidate[]>([]);
   const candWinRef = useRef<string | null>(null);
   const buzzTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const clearBuzz = useCallback(() => {
     candsRef.current = []; candWinRef.current = null;
     if (buzzTimerRef.current) { clearTimeout(buzzTimerRef.current); buzzTimerRef.current = null; }
   }, []);
-
-  // Решение: побеждает наименьшее время реакции. Если за время ожидания игра ушла дальше, нажатия отбрасываются
   const decide = useCallback(() => {
     if (buzzTimerRef.current) { clearTimeout(buzzTimerRef.current); buzzTimerRef.current = null; }
     const cands = candsRef.current; const win = candWinRef.current;
@@ -73,56 +65,41 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const winner = pickWinner(cands);
     dispatch({ type: 'BUZZ', player: winner.player, reactionMs: Math.round(winner.r) });
   }, []);
-
-  // owner: id гостя или null (нажал хозяин); reported: время реакции, присланное гостем; win: номер окна, присланный гостем
   const enqueueBuzz = useCallback((player: number, owner: string | null, reported?: unknown, win?: string) => {
     const s = stateRef.current;
     if (s.phase !== 'playing' || s.locked.includes(player)) return;
     const key = windowKey(s);
-    if (win !== undefined && win !== key) return; // устаревшее нажатие из прошлого окна
+    if (win !== undefined && win !== key) return;
     const lit = litRef.current;
-    if (!lit || lit.win !== key) { dispatch({ type: 'BUZZ', player }); return; } // нет данных о загорании: прежнее поведение
+    if (!lit || lit.win !== key) { dispatch({ type: 'BUZZ', player }); return; }
     if (candWinRef.current !== null && candWinRef.current !== key) clearBuzz();
-    if (candsRef.current.some(c => c.player === player)) return; // повтор того же игрока
+    if (candsRef.current.some(c => c.player === player)) return;
     const arrival = performance.now();
-    const r = owner === null
-      ? Math.max(0, arrival - lit.at)
-      : reactionFromGuest(reported, arrival, lit.at, rttRef.current.median(owner));
+    const r = owner === null ? Math.max(0, arrival - lit.at) : reactionFromGuest(reported, arrival, lit.at, rttRef.current.median(owner));
     candWinRef.current = key;
     candsRef.current.push({ player, owner, r, at: arrival });
     if (candsRef.current.length === 1) {
       const wait = arbitrationWaitMs(candsRef.current[0], s, rttRef.current);
-      if (wait <= 0) decide(); // ждать некого: решаем сразу и синхронно (нужно для автофокуса поля ответа)
-      else buzzTimerRef.current = setTimeout(decide, wait);
+      if (wait <= 0) decide(); else buzzTimerRef.current = setTimeout(decide, wait);
     } else {
       const free = (s.config?.playerNames ?? []).map((_, i) => i).filter(i => !s.locked.includes(i));
-      if (free.every(i => candsRef.current.some(c => c.player === i))) decide(); // нажали все свободные игроки
+      if (free.every(i => candsRef.current.some(c => c.player === i))) decide();
     }
   }, [clearBuzz, decide]);
-
-  // Окно нажатия открывается, когда фаза становится «playing» с новым номером окна
   useEffect(() => {
     if (state.phase === 'playing') {
       const key = windowKey(state);
       if (litRef.current?.win !== key) litRef.current = { win: key, at: performance.now() };
-    } else {
-      litRef.current = null;
-      clearBuzz();
-    }
+    } else { litRef.current = null; clearBuzz(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.attempt, state.locked.length]);
   useEffect(() => () => clearBuzz(), [clearBuzz]);
-
-  // Замер пинга: номер добавляется в снимок, гость сразу отвечает hpong
   const nextPing = useCallback((): { n: number } => {
-    const n = ++pingSeqRef.current;
-    const m = pingSentRef.current;
+    const n = ++pingSeqRef.current; const m = pingSentRef.current;
     m.set(n, performance.now());
     if (m.size > 40) { const oldest = m.keys().next().value; if (oldest !== undefined) m.delete(oldest); }
     return { n };
   }, []);
-
-  // Прогресс слушаем у обоих плееров, но учитываем только тот, что играет текущий раунд (раунды чередуют плееры)
   useEffect(() => {
     if (!players) return;
     const offs = players.map((p, i) => p.onProgress(pos => {
@@ -136,46 +113,36 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     }));
     return () => offs.forEach(off => off());
   }, [players]);
-
   useEffect(() => { if (state.phase !== 'loading') setSoundBlocked(false); }, [state.phase]);
-
-  // Пока играет текущий трек, второй плеер заранее загружает следующий (без запуска звука: два плеера SoundCloud не должны играть одновременно)
   useEffect(() => {
     if (!players || state.phase !== 'playing') return;
-    const nextRound = state.round + 1;
-    const nextIdx = state.order[nextRound];
+    const nextRound = state.round + 1; const nextIdx = state.order[nextRound];
     if (nextIdx === undefined) { setPreloadDone(true); return; }
     const pre = preloadRef.current;
     if (pre && pre.round === nextRound && pre.trackIndex === nextIdx) return;
     const entry: Preload = { round: nextRound, trackIndex: nextIdx, ok: false, promise: Promise.resolve(undefined) };
     setPreloadDone(false);
     entry.promise = players[nextRound % 2].prepareTrack(state.tracks[nextIdx], false, true)
-      .then(info => {
-        if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); }
-        return info;
-      })
+      .then(info => { if (info) { entry.ok = true; dispatch({ type: 'TRACK_INFO', trackIndex: nextIdx, info }); } return info; })
       .finally(() => { if (preloadRef.current === entry) setPreloadDone(true); });
     preloadRef.current = entry;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, players]);
-
-  // Начало раунда: подготовка (или готовый предзагруженный трек) -> ожидание гостей -> старт
   useEffect(() => {
     if (state.phase !== 'loading' || !players || !state.order.length || state.stalled) return;
     const player = players[state.round % 2];
-    const attempt = state.attempt; const trackIndex = state.order[state.round]; const key = `${state.round}:${trackIndex}`;
+    const attempt = state.attempt; const trackIndex = state.order[state.round];
+    const key = `${state.round}:${trackIndex}${state.config?.reverse ? `:${attempt}` : ''}`;
     const remote = (state.config?.owners ?? []).some(o => o !== null);
     let cancelled = false; setPositionMs(0); setSoundBlocked(false);
     const fail = () => { tapStartRef.current = null; dispatch({ type: 'TRACK_FAILED', attempt }); };
-    const wdLoad = setTimeout(fail, LOAD_TIMEOUT_MS);
+    const wdLoad = setTimeout(fail, state.config?.reverse ? 200000 : LOAD_TIMEOUT_MS);
     let wdStart: ReturnType<typeof setTimeout> | undefined;
     (async () => {
-      let info: Track | null | undefined;
-      let fromPreload = false;
+      let info: Track | null | undefined; let fromPreload = false;
       const pre = preloadRef.current;
       if (pre && pre.round === state.round && pre.trackIndex === trackIndex) {
-        info = await pre.promise;
-        fromPreload = !!info;
+        info = await pre.promise; fromPreload = !!info;
         if (cancelled) return;
       }
       if (!info) info = await player.prepareTrack(state.tracks[trackIndex], remote);
@@ -184,70 +151,48 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       clearTimeout(wdLoad); dispatch({ type: 'TRACK_INFO', trackIndex, info });
       const tapped = tapStartRef.current?.round === state.round && tapStartRef.current.trackIndex === trackIndex;
       if (!tapped) {
-        // Игра с гостями: пока гости загружают трек, хозяин беззвучно прогревает свой.
-        // Старый плеер к этому моменту уже остановлен кнопкой «Дальше», так что два плеера не играют одновременно
-        if (remote) await Promise.all([fromPreload ? player.warmPrepared() : Promise.resolve(), waitForGuests(key, GUEST_WAIT_MS)]);
+        if (remote) await Promise.all([fromPreload ? player.warmPrepared() : Promise.resolve(), waitForGuests(key, state.config?.reverse ? 185000 : GUEST_WAIT_MS)]);
         if (cancelled) return;
         net?.send({ t: 'broadcast', data: { k: 'go', key } });
         const started = await player.startPrepared(remote);
         if (cancelled) return;
         if (!started) { fail(); return; }
       }
-      // Звук не пошёл: на телефоне это блокировка браузера, предлагаем нажать кнопку; на компьютере меняем трек
-      wdStart = setTimeout(() => { if (TOUCH) setSoundBlocked(true); else fail(); }, START_TIMEOUT_MS);
+      wdStart = setTimeout(() => { if (TOUCH || state.config?.reverse) setSoundBlocked(true); else fail(); }, START_TIMEOUT_MS);
     })();
     return () => { cancelled = true; clearTimeout(wdLoad); if (wdStart) clearTimeout(wdStart); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.round, state.order, state.attempt, state.stalled, players]);
-
-  // Нажатие «Включить звук» (запасной вариант): запуск внутри жеста пользователя
   const enableSound = useCallback(() => {
-    const s = stateRef.current;
-    const p = playersRef.current?.[s.round % 2];
+    const s = stateRef.current; const p = playersRef.current?.[s.round % 2];
     if (!p) return;
     const attempt = s.attempt;
-    setSoundBlocked(false);
-    void p.startPrepared();
-    setTimeout(() => {
-      const cur = stateRef.current;
-      if (cur.phase === 'loading' && cur.attempt === attempt) dispatch({ type: 'TRACK_FAILED', attempt });
-    }, START_TIMEOUT_MS);
+    setSoundBlocked(false); void p.startPrepared();
+    setTimeout(() => { const cur = stateRef.current; if (cur.phase === 'loading' && cur.attempt === attempt) dispatch({ type: 'TRACK_FAILED', attempt }); }, START_TIMEOUT_MS);
   }, []);
-
-  // «Дальше»: старый трек выключаем сразу (в любом режиме). Если следующий трек уже загружен и игра без гостей,
-  // запускаем его прямо в этом нажатии (так телефон разрешает звук)
   const next = useCallback(() => {
-    const s = stateRef.current;
-    const ps = playersRef.current;
+    const s = stateRef.current; const ps = playersRef.current;
     const remote = (s.config?.owners ?? []).some(o => o !== null);
-    const nextRound = s.round + 1;
-    const pre = preloadRef.current;
+    const nextRound = s.round + 1; const pre = preloadRef.current;
     ps?.[s.round % 2].detach();
     if (ps && !remote && pre && pre.ok && pre.round === nextRound && pre.trackIndex === s.order[nextRound]) {
-      void ps[nextRound % 2].startPrepared();
-      tapStartRef.current = { round: nextRound, trackIndex: pre.trackIndex };
+      void ps[nextRound % 2].startPrepared(); tapStartRef.current = { round: nextRound, trackIndex: pre.trackIndex };
     }
     dispatch({ type: 'NEXT' });
   }, []);
-
-  // На телефоне кнопка «Дальше» ждёт, пока следующий трек загрузится: тогда нажатие гарантированно запускает готовый трек
   const remoteGame = (state.config?.owners ?? []).some(o => o !== null);
   const nextBusy = TOUCH && !remoteGame && state.phase === 'reveal' && !preloadDone && state.order[state.round + 1] !== undefined;
-
   useEffect(() => {
     if (!players) return;
     if (state.phase === 'final' || state.phase === 'setup') { players.forEach(p => p.pause()); return; }
     const p = players[state.round % 2];
     if (state.phase === 'answering') p.pause();
     if (state.phase === 'playing' && prevPhase.current === 'answering') p.resume();
-    if (state.phase === 'reveal') {
-      if (state.result?.kind === 'nobody') p.resume(); else p.playFull();
-    }
+    if (state.phase === 'reveal') { if (state.result?.kind === 'nobody') p.resume(); else p.playFull(); }
     prevPhase.current = state.phase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, players]);
   const prevPhase = useRef(state.phase);
-
   const loadSources = useCallback(async (urls: string[]) => {
     if (!first) return;
     const clean = urls.map(u => u.trim()).filter(Boolean); setLoadError(null); setIsLoadingPlaylist(true);
@@ -280,7 +225,6 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true);
     dispatch({ type: 'START', config, tracks: playlist });
   }, [playlist]);
-  // Нажатие хозяина идёт через общий выбор первого нажавшего (без гостей решение принимается сразу)
   const buzz = useCallback((p: number) => enqueueBuzz(p, null), [enqueueBuzz]);
   const submitAnswer = useCallback((text: string) => dispatch({ type: 'ANSWER', text, ms: answerMs() }), [answerMs]);
   const handleRemote = useCallback((guestId: string, data: any) => {
@@ -288,10 +232,14 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     if (data?.k === 'buzz') {
       const p = Number(data.player);
       if (Number.isInteger(p) && p >= 0 && p < owners.length && owners[p] === guestId) enqueueBuzz(p, guestId, data.r, typeof data.win === 'string' ? data.win : undefined);
+    } else if (data?.k === 'answer') {
+      if (s.config?.reverse && data.answerKey !== `${s.round}-${s.locked.length}`) return;
+      if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200), ms: answerMs() });
+    } else if (data?.k === 'ready') {
+      const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set);
+    } else if (data?.k === 'hpong') {
+      const sent = pingSentRef.current.get(Number(data.n)); if (sent !== undefined) rttRef.current.add(guestId, performance.now() - sent);
     }
-    else if (data?.k === 'answer') { if (s.phase === 'answering' && s.current !== null && owners[s.current] === guestId) dispatch({ type: 'ANSWER', text: String(data.text ?? '').slice(0, 200), ms: answerMs() }); }
-    else if (data?.k === 'ready') { const key = String(data.key); const set = readyRef.current.get(key) ?? new Set<string>(); set.add(guestId); readyRef.current.set(key, set); }
-    else if (data?.k === 'hpong') { const sent = pingSentRef.current.get(Number(data.n)); if (sent !== undefined) rttRef.current.add(guestId, performance.now() - sent); }
   }, [enqueueBuzz, answerMs]);
   return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, nextBusy, loadSources, nextPing,
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
