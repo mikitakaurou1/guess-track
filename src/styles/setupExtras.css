@@ -81,7 +81,7 @@
 }
 .pl-title {
   max-width: 100%;
-  margin-top: 6px;
+  margin-top: 14px;
   font-weight: 800;
   font-size: clamp(20px, 3.4vw, 28px);
   line-height: 1.15;
@@ -116,7 +116,7 @@
 @media (max-width: 520px) {
   .glass .pl-card.glass-inner { gap: 14px; padding: 12px; }
   .pl-art { width: 104px; height: 104px; min-width: 104px; border-radius: 14px; }
-  .pl-title { font-size: 18px; -webkit-line-clamp: 1; }
+  .pl-title { font-size: 18px; -webkit-line-clamp: 1; margin-top: 8px; }
   .pl-creator { margin-bottom: 8px; }
   .glass .pl-card .pl-add { min-width: 0; padding: 8px 14px; }
 }
