@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icon';
-import { fetchPlaylistInfo, type PlaylistInfo } from '../services/playlistInfo';
+import { fetchPlaylistInfo, readCachedInfo, type PlaylistInfo } from '../services/playlistInfo';
 
 interface Props { url: string; fallbackTitle: string; fallbackCreator: string; added: boolean; disabled: boolean; onAdd: () => void; }
 
 const cache = new Map<string, PlaylistInfo>();
 
 export default function FeaturedPlaylist({ url, fallbackTitle, fallbackCreator, added, disabled, onAdd }: Props) {
-  const [info, setInfo] = useState<PlaylistInfo | null>(cache.get(url) ?? null);
+  const [info, setInfo] = useState<PlaylistInfo | null>(cache.get(url) ?? readCachedInfo(url));
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => {
     if (cache.has(url)) return;
     let cancelled = false;
     fetchPlaylistInfo(url)
-      .then((i) => { cache.set(url, i); if (!cancelled) setInfo(i); })
+      .then((i) => { cache.set(url, i); if (!cancelled) { setInfo(i); setImgFailed(false); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [url]);
