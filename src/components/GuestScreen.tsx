@@ -8,7 +8,7 @@ import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
 import Icon from './Icon';
 interface Props { snap: GuestSnapshot; myId: string; soundOn: boolean; audioState: AudioState; onToggleSound: () => void; onResync: () => void; onBuzz: (player: number) => void; onAnswer: (text: string) => void; }
-export default function GuestScreen({ snap, myId, soundOn, audioState, onToggleSound, onResync, onBuzz, onAnswer }: Props) {
+export default function GuestScreen({ snap, myId, soundOn, audioState, onBuzz, onAnswer }: Props) {
   const mine = snap.owners.map((o, i) => o === myId ? i : -1).filter(i => i >= 0);
   if (snap.phase === 'setup') return <section className='glass center-text'><h2>Вы в комнате <Icon name='check-circle' size={24} className='ic-ok'/></h2><p className='muted'>Ждём, пока хозяин начнёт игру...</p></section>;
   if (snap.phase === 'final') return <FinalScreen names={snap.names} avatars={snap.avatars} scores={snap.scores} history={snap.history ?? []}/>;
@@ -20,8 +20,7 @@ export default function GuestScreen({ snap, myId, soundOn, audioState, onToggleS
   else if (snap.phase === 'answering' && snap.current !== null) status = myTurn ? 'Ваша очередь отвечать!' : `Отвечает: ${snap.names[snap.current]}`;
   const la = snap.lastAttempt;
   return <section className='glass'>
-    <div className='row between'><div className='round-info'>Трек <b className='grad'>{snap.round + 1}</b> / {snap.total}</div><div className='row'><button className='btn btn-ghost' onClick={onToggleSound}><Icon name={soundOn ? 'volume' : 'mute'} size={16}/>{soundOn ? 'Звук вкл' : 'Звук выкл'}</button>{soundOn && <button className='btn btn-ghost' onClick={onResync}>Нет звука?</button>}</div></div>
-    <div className='muted small'>Звук: {audioState}</div>
+    <div className='round-info'>Трек <b className='grad'>{snap.round + 1}</b> / {snap.total}</div>
     {soundOn && audioState === 'failed' && <div className='toast bad'>Не удалось загрузить этот трек на вашем устройстве (возможно, он недоступен в вашей стране).</div>}
     <Equalizer active={snap.phase === 'playing' || snap.phase === 'reveal'}/><div className='status'>{status}</div>
     {snap.phase !== 'reveal' && <ProgressBar fraction={snap.clipLeft}/>}
