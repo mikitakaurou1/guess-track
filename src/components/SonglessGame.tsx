@@ -62,6 +62,8 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const [scores, setScores] = useState<number[]>(() => names.map(() => 0));
   const [history, setHistory] = useState<RoundRecord[]>([]);
   const [clip, setClip] = useState<Clip>({ key: 0, ms: CLIPS_MS[0], state: 'idle' });
+  const [silent, setSilent] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const live = useRef({ round: 0, stage: 0, rows: [] as Row[], phase: 'loading' as Phase, info: null as Track | null });
   live.current = { round, stage, rows, phase, info };
@@ -94,6 +96,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
       if (!aw || aw.idx !== i || aw.token !== tokenRef.current) return;
       awaitRef.current = null;
       clearTimers();
+      setSilent(false);
       setClip(c => ({ key: c.key + 1, ms: aw.ms, state: 'run' }));
       timerRef.current = setTimeout(() => { players[i].pause(); endClipRef.current(); }, aw.ms);
     }));
@@ -106,12 +109,14 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     clearTimers();
     const token = ++tokenRef.current;
     awaitRef.current = { token, ms: CLIPS_MS[st], idx: r % 2 };
+    setSilent(false);
     setClip(c => ({ key: c.key, ms: CLIPS_MS[st], state: 'idle' }));
-    safetyRef.current = setTimeout(() => { p.pause(); endClipRef.current(); }, CLIPS_MS[st] + 4000);
+    // Если плеер так и не начал играть, считаем, что у трека нет звука
+    safetyRef.current = setTimeout(() => { p.pause(); endClipRef.current(); setSilent(true); }, CLIPS_MS[st] + 4000);
     if (first) {
       const ok = await p.startPrepared(false);
       if (token !== tokenRef.current) return;
-      if (!ok) endClipRef.current();
+      if (!ok) { endClipRef.current(); setSilent(true); }
     } else {
       p.playFromStart();
     }
@@ -126,6 +131,7 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
   const loadRound = async (r: number) => {
     const my = ++loadRef.current;
     setRound(r); setPhase('loading'); setStage(0); setRows([]); setText(''); setResult(null); setInfo(null);
+    setSilent(false); setNotice('');
     setClip({ key: 0, ms: CLIPS_MS[0], state: 'idle' });
     let tries = 0;
     for (;;) {
@@ -212,6 +218,20 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
     }
   };
 
+  // «Нет звука»: текущий трек заменяется запасным, раунд начинается заново без потери попыток и баллов
+  const noSound = () => {
+    const L = live.current;
+    if (L.phase !== 'guess' && L.phase !== 'loading') return;
+    const nxt = reserveRef.current.shift();
+    if (nxt === undefined) { setNotice('Запасных треков не осталось. Попробуйте «Послушать» ещё раз или «Пропустить».'); return; }
+    const r = L.round;
+    tokenRef.current++; loadRef.current++;
+    endClip();
+    players?.[r % 2].detach();
+    orderRef.current[r] = nxt;
+    void loadRound(r);
+  };
+
   const next = () => {
     const r = live.current.round;
     endClip();
@@ -246,13 +266,16 @@ export default function SonglessGame({ players, playlist, config, onExit }: Prop
       if (phase === 'guess' || phase === 'loading') return <div key={i} className='sl-row future'>{clipLabel(ms)} · +{POINTS[i]}</div>;
       return <div key={i} className='sl-row future'/>;
     })}</div>
-    {phase === 'loading' && <div className='status'>Загружаем трек...</div>}
+    {phase === 'loading' && <><div className='status'>Загружаем трек...</div><button className='btn btn-ghost' onClick={noSound}><Icon name='mute' size={16}/> Нет звука — заменить трек</button></>}
     {phase === 'error' && <><div className='error'>Не удалось загрузить трек. Возможно, он недоступен в вашей стране.</div><button className='btn btn-primary btn-lg' onClick={next}>{round + 1 >= total ? 'Итоги' : 'Дальше'}</button></>}
+    {notice && <div className='toast bad'>{notice}</div>}
+    {phase === 'guess' && silent && <div className='toast bad'>Похоже, звука нет. Нажмите «Нет звука» — трек заменится на другой.</div>}
     {phase === 'guess' && <>
       <div className='sl-fill-wrap'><div key={clip.key} className={`sl-fill ${clip.state}`} style={clip.state === 'run' ? { animationDuration: `${clip.ms}ms` } : undefined}/></div>
       <div className='sl-actions'>
         <button className='btn btn-ghost' onClick={() => void startClip(round, stage, false)}><Icon name='play' size={16}/> Послушать</button>
         <button className='btn btn-ghost' onClick={() => advance({ kind: 'skip' })}><Icon name='skip' size={16}/> {skipLabel}</button>
+        <button className={`btn ${silent ? 'btn-primary' : 'btn-ghost'}`} onClick={noSound}><Icon name='mute' size={16}/> Нет звука</button>
         <button className='btn btn-primary' onClick={submit} disabled={!text.trim()}>Ответить</button>
       </div>
     </>}
