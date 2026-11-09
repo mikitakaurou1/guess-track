@@ -5,6 +5,7 @@ import GameScreen from './components/GameScreen';
 import FinalScreen from './components/FinalScreen';
 import GuestApp from './components/GuestApp';
 import SonglessGame from './components/SonglessGame';
+import ReverseGame from './components/ReverseGame';
 import Deco from './components/Deco';
 import Logo from './components/Logo';
 import { useSoundCloud } from './hooks/useSoundCloud';
@@ -22,13 +23,13 @@ export default function App() {
   const room = useHostRoom(game.handleRemote); sendRef.current = room.send;
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const [songless, setSongless] = useState<GameConfig | null>(null);
+  const [reverse, setReverse] = useState(false);
   const { state } = game;
   const rsSeed = state.config?.randomStart ? (state.config.startSeed ?? 0) : null;
   const rsClip = state.config?.clipSeconds ?? 10;
   useLayoutEffect(() => { const m = rsSeed === null ? undefined : { seed: rsSeed, clipMs: rsClip * 1000 }; players?.forEach(p => p.setStartMode(m)); }, [players, rsSeed, rsClip]);
   const bucket = Math.floor(game.positionMs / 500);
   useEffect(() => {
-    // hp: замер пинга гостей (гость отвечает сразу после получения)
     if (room.code) room.send({ t: 'broadcast', data: { ...buildSnapshot(state, game.positionMs), hp: game.nextPing() } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.code, room.guests, state, bucket]);
@@ -37,7 +38,11 @@ export default function App() {
     <main className='wrap'><Logo/><HiddenPlayer refA={iframeA} refB={iframeB}/>
       {mode === 'join' && <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')}/>}
       {mode === 'host' && <>
-        {state.phase === 'setup' && <div hidden={!!songless}><SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); if (cfg.songless) setSongless(cfg); else game.startGame(cfg); }} onJoinMode={() => setMode('join')}/></div>}
+        {state.phase === 'setup' && <div hidden={!!songless || reverse}>
+          {game.playlist.length > 0 && <section className='glass'><div className='block-title'>Отдельный режим: Перевертыш</div><p className='muted small'>Угадайте трек по отрывку, который звучит задом наперёд. Одиночная игра; длина отрывка и количество треков настраиваются перед стартом. Требуется отдельный сервис обработки аудио.</p><button className='btn btn-primary' disabled={!!room.code} onClick={() => { players?.forEach(p => p.detach()); setReverse(true); }}>Перевертыш</button>{room.code && <p className='muted small'>Сначала закройте сетевую комнату.</p>}</section>}
+          <SetupScreen ready={!!player} busy={game.isLoadingPlaylist} error={error ?? game.loadError} playlist={game.playlist} sources={game.sources} room={room} onLoadSources={game.loadSources} onChangePlaylist={game.clearPlaylist} onStart={cfg => { player?.unlock(); if (cfg.songless) setSongless(cfg); else game.startGame(cfg); }} onJoinMode={() => setMode('join')}/>
+        </div>}
+        {state.phase === 'setup' && reverse && <ReverseGame playlist={game.playlist} onExit={() => setReverse(false)}/>}
         {state.phase === 'setup' && songless && <SonglessGame players={players} playlist={game.playlist} config={songless} onExit={() => setSongless(null)}/>}
         {state.phase !== 'setup' && state.phase !== 'final' && state.config && <GameScreen state={state} track={game.track} positionMs={game.positionMs} soundBlocked={game.soundBlocked} nextBusy={game.nextBusy} onEnableSound={game.enableSound} onBuzz={game.buzz} onSubmit={game.submitAnswer} onTimeout={game.answerTimeout} onSkip={game.skip} onNext={game.next} onFinish={game.finish} onRetry={() => { player?.unlock(); game.retry(); }}/>}
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={game.reset}/>}
