@@ -16,6 +16,7 @@ export function reverseSrc(raw: string, seconds: number): string | null {
 }
 // Сохраняем контракт существующего плеера, меняя только аудиодвижок.
 // Не переопределённые методы (например, загрузка плейлистов) работают через SoundCloud.
+// На карточке трека (playFull / playOriginal) звучит оригинал через исходный плеер SoundCloud.
 export function createReversePlayer(original: SoundCloudPlayer, seconds: () => number): SoundCloudPlayer {
   const audio = new Audio();
   audio.preload = 'auto';
@@ -28,6 +29,7 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
   let abort: AbortController | null = null;
   let clip = 10;
   let metadata: Track | null = null;
+  let lastTrack: Track | null = null;
   const emit = () => { if (report) progress.forEach(f => f(audio.currentTime * 1000)); };
   audio.addEventListener('timeupdate', emit);
   audio.addEventListener('playing', () => { plays.forEach(f => f()); emit(); });
@@ -38,7 +40,7 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = ''; prepared = false;
   };
-  const begin = () => { generation++; abort?.abort(); stop(); release(); return generation; };
+  const begin = () => { generation++; abort?.abort(); stop(); release(); original.pause(); return generation; };
   const load = async (src: string, token: number): Promise<boolean> => {
     const controller = new AbortController(); abort = controller;
     const timer = setTimeout(() => controller.abort(), 185000);
@@ -60,13 +62,14 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
     onPlay: (f: () => void) => { plays.add(f); return () => { plays.delete(f); }; },
     setStartMode: () => {},
     unlock: () => { original.unlock(); if (prepared) play(); },
-    detach: () => { generation++; abort?.abort(); stop(); release(); },
-    pause: stop,
+    detach: () => { generation++; abort?.abort(); stop(); release(); original.detach(); },
+    pause: () => { stop(); original.pause(); },
     resume: () => { report = true; play(); },
     warmPrepared: async () => {},
     prepareTrack: async (track: Track, _warm: boolean, _lenient = false): Promise<Track | null | undefined> => {
       const token = begin();
       clip = seconds();
+      lastTrack = track;
       let info = track;
       if (!permalink(info.url)) {
         original.setStartMode(undefined);
@@ -75,6 +78,7 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
         original.detach();
         if (!resolved || resolved.id !== track.id) return null;
         info = { ...track, title: resolved.title || track.title, artist: resolved.artist || track.artist, artwork: resolved.artwork || track.artwork, url: resolved.url };
+        lastTrack = info;
       }
       const src = reverseSrc(info.url, clip);
       if (!src) return null;
@@ -98,7 +102,22 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
     },
     playWarmed: () => { report = true; audio.currentTime = 0; play(); },
     playFromStart: () => { report = true; audio.currentTime = 0; play(); },
-    playFull: () => { report = false; audio.currentTime = 0; play(); },
+    // Карточка трека (хозяин): догружаем оригинал в плеер SoundCloud и играем с начала
+    playFull: () => {
+      stop();
+      const g = ++generation;
+      const t = metadata ?? lastTrack;
+      if (!t) return;
+      original.setStartMode(undefined);
+      void original.prepareTrack(t, false).then(info => { if (g === generation && info) original.playFull(); });
+    },
+    // Карточка трека (гость): оригинал по ссылке из снимка комнаты
+    playOriginal: (src: string) => {
+      stop();
+      const g = ++generation;
+      original.setStartMode(undefined);
+      void original.loadOnly(src, false).then(ok => { if (g === generation && ok) original.playFull(); });
+    },
   };
   return new Proxy(original, {
     get(target, property) {

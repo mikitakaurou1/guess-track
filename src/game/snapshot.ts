@@ -18,7 +18,7 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
     clipLeft, lastAttempt: state.lastAttempt,
     reveal: state.phase === 'reveal' ? state.history[state.history.length - 1] ?? null : null,
     history: state.phase === 'final' ? state.history : null, failStreak: state.failStreak,
-    audio: src ? { key: `${state.round}:${state.order[state.round]}${c?.reverse ? `:${state.attempt}` : ''}`, src } : null,
+    audio: src ? { key: `${state.round}:${state.order[state.round]}${c?.reverse ? `:${state.attempt}` : ''}`, src, orig: c?.reverse ? trackSrc(track!) : undefined } : null,
     win: windowKey(state),
     rs: c?.randomStart ? { seed: c.startSeed ?? 0, clipMs: c.clipSeconds * 1000 } : null,
     reverseSeconds: c?.reverse ? c.clipSeconds : undefined,

@@ -9,6 +9,7 @@ export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapsh
   const readySent = useRef<string | null>(null); const run = useRef(0); const lastPlayAt = useRef(0);
   const phase = snap?.phase ?? null; const key = snap?.audio?.key ?? null;
   const srcRef = useRef<string | null>(null); srcRef.current = snap?.audio?.src ?? null;
+  const origRef = useRef<string | null>(null); origRef.current = snap?.audio?.orig ?? null;
   const phaseRef = useRef(phase); phaseRef.current = phase;
   const keyRef = useRef(key); keyRef.current = key;
   const resultRef = useRef(snap?.reveal?.result.kind); resultRef.current = snap?.reveal?.result.kind;
@@ -48,7 +49,9 @@ export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapsh
         if (prev === 'answering') tryPlay(() => player.resume());
         else if (startedKey.current !== key) { startedKey.current = key; tryPlay(() => player.playFromStart()); }
       } else if (phase === 'reveal') {
-        if (resultRef.current === 'nobody') { player.resume(); setAudioState('playing'); }
+        const rp = player as unknown as { playOriginal?: (src: string) => void };
+        if (origRef.current && rp.playOriginal) { rp.playOriginal(origRef.current); setAudioState('playing'); }
+        else if (resultRef.current === 'nobody') { player.resume(); setAudioState('playing'); }
         else tryPlay(() => player.playFromStart());
       } else if (phase === 'loading') {
         if (startedKey.current !== key) { player.pause(); setAudioState('ready'); }

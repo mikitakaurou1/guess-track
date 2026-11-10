@@ -188,7 +188,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const p = players[state.round % 2];
     if (state.phase === 'answering') p.pause();
     if (state.phase === 'playing' && prevPhase.current === 'answering') p.resume();
-    if (state.phase === 'reveal') { if (state.result?.kind === 'nobody') p.resume(); else p.playFull(); }
+    if (state.phase === 'reveal') { if (state.result?.kind === 'nobody' && !state.config?.reverse) p.resume(); else p.playFull(); }
     prevPhase.current = state.phase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, players]);

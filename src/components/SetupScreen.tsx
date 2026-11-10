@@ -103,7 +103,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       {gameMode === 'start' && <p className='muted small'>Угадайте трек по началу: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
       {gameMode === 'mid' && <p className='muted small'>Угадайте трек по отрывку со случайного места: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
       {songless && <p className='muted small'>Угадайте трек за 6 попыток, начиная с 0,5 с. Ошибка или «Пропустить» удлиняет отрывок и снижает награду с 6 до 1 балла. Одиночный режим. Идея: <a href='https://songless.ru' target='_blank' rel='noreferrer'>songless.ru</a>.</p>}
-      {reverse && <p className='muted small'>Угадайте трек задом наперёд: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
+      {reverse && <p className='muted small'>Угадайте трек задом наперёд: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.<span className='reverse-warn'>⚠ Загрузка треков может занять больше времени.</span></p>}
       {!!room.code && <p className='muted small'>Сонглесс недоступен, пока открыта комната. Перевертыш поддерживает игру по сети.</p>}
     </div>
     {!songless && <div className='grid-2'><div className='block'><div className='block-title'>Секунд фрагмента</div><NumberField value={clipText} onChange={setClipText} min={1} max={60}/></div><div className='block'><div className='block-title'>Секунд на ответ</div><NumberField value={answerText} onChange={setAnswerText} min={3} max={60}/></div></div>}
