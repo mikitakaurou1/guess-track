@@ -21,7 +21,7 @@
   font-size: 13px;
   color: var(--txt);
 }
-.howto .howto-note { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--mut); line-height: 1.45; }
+.howto .howto-note { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; font-size: 14px; color: var(--mut); line-height: 1.45; }
 .howto .howto-note .icon { margin-top: 2px; color: var(--bad); }
 .only-sc { color: var(--txt); }
 .only-sc b { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
