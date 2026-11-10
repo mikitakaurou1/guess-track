@@ -100,8 +100,9 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
     </div>
     <div className='block'><div className='block-title'>Режим</div>
       <div className='seg mode-selector'><button className={gameMode === 'start' ? 'on' : ''} onClick={() => setGameMode('start')}>С начала</button><button className={gameMode === 'mid' ? 'on' : ''} onClick={() => setGameMode('mid')}>Не с начала</button><button className={songless ? 'on' : ''} onClick={() => setGameMode('songless')} disabled={!!room.code}>Сонглесс</button><button className={reverse ? 'on' : ''} onClick={() => setGameMode('reverse')} disabled={!onReverseStart}>Перевертыш</button></div>
-      {gameMode === 'mid' && <p className='muted small'>Каждый трек начинается со случайного места, у каждого трека своё.</p>}
-      {songless && <p className='muted small'>Сначала звучит 0,5 с трека с самого начала. Угадали — 6 баллов. Не узнали — жмите «Пропустить»: дадут 1 с (5 баллов), затем 2 с (4 балла), 5 с (3 балла), 10 с (2 балла) и 20 с (1 балл). Неверный ответ тоже тратит попытку и открывает следующий отрезок. Не угадали и за 20 с — 0 баллов, и показывается карточка трека. Режим одиночный. Авторы идеи: <a href='https://songless.ru' target='_blank' rel='noreferrer'>songless.ru</a>.</p>}
+      {gameMode === 'start' && <p className='muted small'>Угадайте трек по началу: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
+      {gameMode === 'mid' && <p className='muted small'>Угадайте трек по отрывку со случайного места: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
+      {songless && <p className='muted small'>Угадайте трек за 6 попыток, начиная с 0,5 с. Ошибка или «Пропустить» удлиняет отрывок и снижает награду с 6 до 1 балла. Одиночный режим. Идея: <a href='https://songless.ru' target='_blank' rel='noreferrer'>songless.ru</a>.</p>}
       {reverse && <p className='muted small'>Угадайте трек задом наперёд: нажмите «ЖМУ!» и успейте ответить. Верный ответ — 1 балл и конец раунда. Ошибка — без повторной попытки на этот трек.</p>}
       {!!room.code && <p className='muted small'>Сонглесс недоступен, пока открыта комната. Перевертыш поддерживает игру по сети.</p>}
     </div>
