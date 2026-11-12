@@ -3,10 +3,11 @@ import { gameReducer, initialState, selectCurrentTrack } from '../game/gameReduc
 import { LOAD_TIMEOUT_MS, type SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { fetchLikes, resolveShortUrl } from '../services/likesApi';
 import { parseSoundCloudUrl } from '../services/soundcloudUrl';
-import { RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey, type BuzzCandidate } from '../game/buzz';
+import { DEFAULT_RTT_MS, RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey, type BuzzCandidate } from '../game/buzz';
 import type { GameConfig, Track } from '../types/game';
 const GUEST_WAIT_MS = 4000;
 const START_TIMEOUT_MS = 6000;
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 const TOUCH = typeof window !== 'undefined' && (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || !!window.matchMedia?.('(pointer: coarse)').matches);
 export interface SourceStat { label: string; count: number; }
 export interface GameNet { send: (obj: unknown) => void; }
@@ -48,6 +49,15 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const rttRef = useRef(new RttTracker());
   const pingSentRef = useRef(new Map<number, number>());
   const pingSeqRef = useRef(0);
+  const goLead = (): { ms: number; d: Record<string, number> } => {
+    const ids = [...new Set((stateRef.current.config?.owners ?? []).filter((o): o is string => o !== null))];
+    if (!ids.length) return { ms: 0, d: {} };
+    const oneWay = (id: string) => (rttRef.current.median(id) ?? DEFAULT_RTT_MS) / 2;
+    const ms = Math.round(Math.min(1500, Math.max(300, Math.max(...ids.map(oneWay)) + 200)));
+    const d: Record<string, number> = {};
+    ids.forEach(id => { d[id] = Math.max(0, Math.round(ms - oneWay(id))); });
+    return { ms, d };
+  };
   const litRef = useRef<{ win: string; at: number } | null>(null);
   const candsRef = useRef<BuzzCandidate[]>([]);
   const candWinRef = useRef<string | null>(null);
@@ -153,7 +163,9 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       if (!tapped) {
         if (remote) await Promise.all([fromPreload ? player.warmPrepared() : Promise.resolve(), waitForGuests(key, state.config?.reverse ? 185000 : GUEST_WAIT_MS)]);
         if (cancelled) return;
-        net?.send({ t: 'broadcast', data: { k: 'go', key } });
+        const lead = goLead();
+        net?.send({ t: 'broadcast', data: { k: 'go', key, d: lead.d } });
+        if (lead.ms > 0) { await sleep(lead.ms); if (cancelled) return; }
         const started = await player.startPrepared(remote);
         if (cancelled) return;
         if (!started) { fail(); return; }

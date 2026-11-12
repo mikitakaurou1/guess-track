@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import type { GuestSnapshot } from '../types/room';
 export type AudioState = 'idle' | 'loading' | 'ready' | 'playing' | 'blocked' | 'failed';
-export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapshot | null, enabled: boolean, go: { key: string; n: number } | null, onReady: (key: string) => void) {
+export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapshot | null, enabled: boolean, go: { key: string; n: number; at?: number; wait?: number } | null, onReady: (key: string) => void) {
   const [audioState, setAudioState] = useState<AudioState>('idle');
   const loaded = useRef<{ key: string; promise: Promise<boolean> } | null>(null);
   const prevPhase = useRef<string | null>(null); const startedKey = useRef<string | null>(null);
@@ -35,7 +35,12 @@ export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapsh
     if (!player || !go || !enabled) return;
     const cur = loaded.current; if (!cur || cur.key !== go.key || keyRef.current !== go.key) return;
     const goKey = go.key; startedKey.current = goKey;
-    cur.promise.then(ok => { if (ok && startedKey.current === goKey) tryPlay(() => player.playWarmed()); });
+    const receivedAt = go.at ?? performance.now(); const planned = go.wait ?? 0;
+    cur.promise.then(ok => {
+      if (!ok) return;
+      const wait = Math.max(0, planned - (performance.now() - receivedAt));
+      setTimeout(() => { if (startedKey.current === goKey && keyRef.current === goKey) tryPlay(() => player.playWarmed()); }, wait);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [go]);
   useEffect(() => {

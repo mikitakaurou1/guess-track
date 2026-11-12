@@ -34,25 +34,29 @@ export function useHostRoom(onGuestMessage: (guestId: string, data: any) => void
   return { code, guests, connecting, error, open, close, send };
 }
 export type HostRoom = ReturnType<typeof useHostRoom>;
+export interface GoSignal { key: string; n: number; at: number; wait: number; }
 export function useGuestRoom() {
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'joined' | 'closed'>('idle');
   const [myId, setMyId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<GuestSnapshot | null>(null);
-  const [go, setGo] = useState<{ key: string; n: number } | null>(null);
+  const [go, setGo] = useState<GoSignal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const join = useCallback((code: string, name: string) => {
     wsRef.current?.close(); setError(null); setStatus('connecting');
     const ws = new WebSocket(wsUrl()); wsRef.current = ws;
+    let meId = '';
     ws.onopen = () => ws.send(JSON.stringify({ t: 'join', code, name }));
     ws.onmessage = e => {
       const m = JSON.parse(e.data);
       if (m.t === 'joined') {
         ws.send(JSON.stringify({ t: 'to_host', data: { k: 'avatar', avatar: validAvatar(localStorage.getItem('guestAvatar') ?? undefined) } }));
-        setMyId(m.id); setStatus('joined');
+        meId = String(m.id); setMyId(m.id); setStatus('joined');
       } else if (m.t === 'host_msg') {
-        if (m.data?.k === 'go') setGo({ key: String(m.data.key), n: Date.now() });
-        else {
+        if (m.data?.k === 'go') {
+          const w = m.data.d && typeof m.data.d[meId] === 'number' ? m.data.d[meId] : 0;
+          setGo({ key: String(m.data.key), n: Date.now(), at: performance.now(), wait: Math.min(3000, Math.max(0, w)) });
+        } else {
           // Замер пинга: сразу, до отрисовки, отвечаем хозяину тем же номером
           if (typeof m.data?.hp?.n === 'number') ws.send(JSON.stringify({ t: 'to_host', data: { k: 'hpong', n: m.data.hp.n } }));
           setSnapshot(m.data);
