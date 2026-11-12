@@ -75,7 +75,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const guests = solo ? [] : room.guests;
   const totalPlayers = effLocal + guests.length;
   const playersOk = totalPlayers >= 1 && totalPlayers <= MAX_PLAYERS;
-  const joinLink = room.code ? `${location.origin}/?room=${room.code}` : '';
+  const joinLink = room.code ? `${location.origin}${import.meta.env.BASE_URL}?room=${room.code}` : '';
   const start = () => {
     const localNames = names.slice(0, effLocal).map((n, i) => n.trim() || `Игрок ${i + 1}`);
     const draft = countDraft === null ? tracks : toNum(countDraft, S, maxTotal, tracks);
