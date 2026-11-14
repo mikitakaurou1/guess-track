@@ -2,8 +2,9 @@
 // Чтобы добавить артиста, допишите объект в ARTISTS. Поиск идёт ТОЛЬКО по написаниям из aliases (точно как написано, без «склеенных» вариантов).
 // titleMatch: false — не искать имя в названии трека (для имён-обычных слов), останутся треки с аккаунта артиста и где он указан автором.
 // blacklist: id треков, которые нужно убрать всегда; whitelist: id треков, которые не проверяются на «лишние» слова (ремикс и т.п.).
-// Треки, помеченные кнопкой «Не тот трек» в игре, сохраняются в файле (см. BLOCKLIST_FILE) и тоже убираются.
-// Порядок карточек меняет админ (переменная окружения ADMIN_PASSWORD), порядок хранится в ARTIST_ORDER_FILE.
+// Треки, помеченные кнопкой «Не тот трек» в игре или удалённые админом, сохраняются в файле (см. BLOCKLIST_FILE) и тоже убираются.
+// Порядок карточек, удаление треков и обложки меняет админ (переменная окружения ADMIN_PASSWORD).
+// Файлы: порядок — ARTIST_ORDER_FILE, обложки — папка ARTIST_COVERS_DIR.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -55,10 +56,12 @@ const MIN_MS = 45_000;
 const MAX_MS = 10 * 60 * 1000;
 const MAX_PARALLEL = 3;
 const PAGE_DELAY_MS = 120;
+const MAX_COVER_BYTES = 1.5 * 1024 * 1024;
 
 const REASONS = { 'other-artist': 'Другой исполнитель', remix: 'Ремикс / перезалив', 'ai-cover': 'ИИ-кавер' };
 const BLOCKLIST_FILE = process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json');
 const ORDER_FILE = process.env.ARTIST_ORDER_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'artist-order.json');
+const COVERS_DIR = process.env.ARTIST_COVERS_DIR ?? path.join(path.dirname(BLOCKLIST_FILE), 'covers');
 const MAX_REPORTS_PER_HOUR = 30;
 const MAX_FAILED_LOGINS_PER_HOUR = 10;
 
@@ -86,6 +89,54 @@ let order = readJson(ORDER_FILE, []);
 if (!Array.isArray(order)) order = [];
 order = order.map(String);
 const saveOrder = () => writeJson(ORDER_FILE, order, 'порядок артистов');
+
+// Обложки: один файл на артиста, имя <id>.png|jpg|svg
+const COVER_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/svg+xml': 'svg' };
+const COVER_MIME = { png: 'image/png', jpg: 'image/jpeg', svg: 'image/svg+xml' };
+const coverCache = new Map();
+function findCover(id) {
+  if (coverCache.has(id)) return coverCache.get(id);
+  let found = null;
+  for (const ext of Object.keys(COVER_MIME)) {
+    const file = path.join(COVERS_DIR, `${id}.${ext}`);
+    try {
+      const st = fs.statSync(file);
+      found = { file, ext, v: Math.round(st.mtimeMs) };
+      break;
+    } catch {
+      /* такого файла нет */
+    }
+  }
+  coverCache.set(id, found);
+  return found;
+}
+function removeCovers(id) {
+  for (const ext of Object.keys(COVER_MIME)) {
+    try {
+      fs.unlinkSync(path.join(COVERS_DIR, `${id}.${ext}`));
+    } catch {
+      /* файла не было */
+    }
+  }
+  coverCache.delete(id);
+}
+function saveCover(id, dataUrl) {
+  const m = /^data:(image\/(?:png|jpeg|svg\+xml));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ''));
+  if (!m) return 'Нужен файл .jpg, .png или .svg';
+  const buf = Buffer.from(m[2], 'base64');
+  if (!buf.length) return 'Пустой файл';
+  if (buf.length > MAX_COVER_BYTES) return 'Файл слишком большой (максимум 1,5 МБ)';
+  try {
+    fs.mkdirSync(COVERS_DIR, { recursive: true });
+    removeCovers(id);
+    fs.writeFileSync(path.join(COVERS_DIR, `${id}.${COVER_TYPES[m[1]]}`), buf);
+    coverCache.delete(id);
+  } catch (e) {
+    console.error('Не удалось сохранить обложку:', e.message);
+    return 'Не удалось сохранить файл на сервере';
+  }
+  return null;
+}
 
 const reportHits = new Map();
 function tooManyReports(ip) {
@@ -306,13 +357,16 @@ function ensure(s, v2, urgent = false) {
   return s.promise;
 }
 
-const info = (s) => ({
-  id: s.def.id,
-  name: s.def.name,
-  artwork: s.artwork,
-  count: s.tracks?.length ?? 0,
-  status: s.tracks ? 'ready' : s.promise || !s.failedAt ? 'building' : 'error',
-});
+const info = (s) => {
+  const cover = findCover(s.def.id);
+  return {
+    id: s.def.id,
+    name: s.def.name,
+    artwork: cover ? `/api/artist-cover?id=${encodeURIComponent(s.def.id)}&v=${cover.v}` : s.artwork,
+    count: s.tracks?.length ?? 0,
+    status: s.tracks ? 'ready' : s.promise || !s.failedAt ? 'building' : 'error',
+  };
+};
 
 function parseBody(req) {
   try {
@@ -325,6 +379,7 @@ function parseBody(req) {
 
 export function registerArtistRoutes(app, v2) {
   const textBody = express.text({ type: () => true, limit: '8kb' });
+  const bigTextBody = express.text({ type: () => true, limit: '3mb' });
 
   app.get('/api/artists', (req, res) => {
     const list = orderedStates();
@@ -342,6 +397,21 @@ export function registerArtistRoutes(app, v2) {
     await ensure(s, v2, true);
     if (!s.tracks) return res.status(502).json({ error: `Не удалось собрать треки «${s.def.name}». Попробуйте через минуту.` });
     res.json(s.tracks);
+  });
+
+  // Обложка артиста, загруженная админом
+  app.get('/api/artist-cover', (req, res) => {
+    const id = String(req.query.id ?? '');
+    const cover = state.has(id) ? findCover(id) : null;
+    if (!cover) return res.status(404).end();
+    fs.readFile(cover.file, (err, buf) => {
+      if (err) return res.status(404).end();
+      res.setHeader('Content-Type', COVER_MIME[cover.ext]);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      res.end(buf);
+    });
   });
 
   // Жалоба на трек: «другой исполнитель», «ремикс», «ИИ-кавер». Тело приходит как text/plain (JSON), чтобы не нужен был CORS-предзапрос.
@@ -386,6 +456,42 @@ export function registerArtistRoutes(app, v2) {
     if (!ids || !ids.length) return res.status(400).json({ error: 'Некорректный порядок' });
     order = ids;
     saveOrder();
+    res.json({ ok: true });
+  });
+
+  // Админ удаляет трек из каталога артиста (запоминается в списке скрытых)
+  app.post('/api/artist-track-delete', textBody, (req, res) => {
+    const body = adminGate(req, res);
+    if (!body) return;
+    const s = state.get(String(body.artistId ?? ''));
+    const trackId = Number(body.trackId);
+    if (!s || !Number.isInteger(trackId)) return res.status(400).json({ error: 'Некорректный запрос' });
+    const track = s.tracks?.find((t) => t.id === trackId);
+    if (!track) return res.status(404).json({ error: 'Трека нет в каталоге' });
+    (blocked[s.def.id] ??= {})[trackId] = { reason: 'admin', title: track.title, at: new Date().toISOString() };
+    saveBlocked();
+    s.tracks = s.tracks.filter((t) => t.id !== trackId);
+    console.log(`Админ удалил трек ${trackId} «${track.title}» у «${s.def.name}»`);
+    res.json({ ok: true, count: s.tracks.length });
+  });
+
+  // Админ меняет обложку: тело {password, artistId, dataUrl} (png, jpeg или svg в base64)
+  app.post('/api/artist-cover', bigTextBody, (req, res) => {
+    const body = adminGate(req, res);
+    if (!body) return;
+    const s = state.get(String(body.artistId ?? ''));
+    if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
+    const error = saveCover(s.def.id, body.dataUrl);
+    if (error) return res.status(400).json({ error });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/artist-cover-reset', textBody, (req, res) => {
+    const body = adminGate(req, res);
+    if (!body) return;
+    const s = state.get(String(body.artistId ?? ''));
+    if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
+    removeCovers(s.def.id);
     res.json({ ok: true });
   });
 

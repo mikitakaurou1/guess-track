@@ -2,15 +2,24 @@
 .artists-head { font-weight: 700; }
 .artists-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
 .artist-card { flex: 0 0 168px; scroll-snap-align: start; display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
+.artist-card[draggable='true'] { cursor: grab; }
+.artist-card.dragging { opacity: .4; }
+.artist-card.drop-target { outline: 2px dashed var(--c); outline-offset: 2px; }
 .artist-art { width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover; }
 .artist-art-ph { display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--mut); }
 .artist-name { font-weight: 800; overflow-wrap: anywhere; }
 .artist-count { color: var(--mut); font-size: 13px; }
 .artist-card .btn { width: 100%; justify-content: center; }
-.artist-move { display: flex; gap: 8px; }
-.artist-move .btn { flex: 1; width: auto; }
-.artist-move .flip { display: inline-flex; transform: scaleX(-1); }
+.artist-admin-actions { display: flex; gap: 8px; }
+.artist-admin-actions .btn { flex: 1; width: auto; cursor: pointer; }
+.artist-admin-actions .is-disabled { opacity: .5; pointer-events: none; }
 .artists-admin { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.tracks-panel { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
+.tracks-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tracks-actions { margin-left: auto; display: flex; gap: 8px; }
+.tracks-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; display: grid; gap: 6px; }
+.tracks-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.04); }
+.tracks-tx { min-width: 0; overflow-wrap: anywhere; }
 .report { display: grid; gap: 10px; justify-items: start; margin-top: 12px; }
 .report-menu { display: flex; flex-wrap: wrap; gap: 8px; }
 .report-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--mut); font-size: 14px; }
