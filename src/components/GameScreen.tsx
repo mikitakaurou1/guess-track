@@ -4,6 +4,7 @@ import type { Track } from '../types/game';
 import PlayerCard from './PlayerCard';
 import AnswerPanel from './AnswerPanel';
 import RevealPanel from './RevealPanel';
+import ReportTrack from './ReportTrack';
 import ProgressBar from './ProgressBar';
 import Equalizer from './Equalizer';
 import Icon from './Icon';
@@ -34,6 +35,7 @@ export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, 
     <div className='players'>{names.map((name, i) => <PlayerCard key={i} name={name} avatar={config.avatars?.[i]} index={i} score={state.scores[i]} active={state.current === i} locked={state.locked.includes(i)} remote={owners[i] !== null} disabled={!canBuzz || state.locked.includes(i) || owners[i] !== null} onBuzz={() => onBuzz(i)}/>)}</div>
     {state.phase === 'answering' && state.current !== null && <AnswerPanel key={`${state.round}-${state.locked.length}`} playerName={names[state.current]} seconds={config.answerSeconds} remote={owners[state.current] !== null} onSubmit={onSubmit} onTimeout={onTimeout}/>}
     {state.phase === 'reveal' && record && <RevealPanel record={record} playerNames={names} isLast={state.round + 1 >= total} nextBusy={nextBusy} onNext={onNext}/>}
+    {state.phase === 'reveal' && record && <ReportTrack key={record.track.id} trackId={record.track.id}/>}
     {canBuzz && <div className='row end'><button className='btn btn-ghost' onClick={onSkip}><Icon name='skip' size={16}/> Пропустить трек</button></div>}
   </section>;
 }

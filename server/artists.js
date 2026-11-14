@@ -1,6 +1,12 @@
 // Каталоги артистов: ищем треки, где артист в авторах или в названии; убираем ремиксы и дубли.
 // Чтобы добавить артиста, допишите объект в ARTISTS.
 // blacklist: id треков, которые нужно убрать всегда; whitelist: id треков, которые не проверяются на «лишние» слова (ремикс и т.п.).
+// Треки, помеченные кнопкой «Не тот трек» в игре, сохраняются в файле (см. BLOCKLIST_FILE) и тоже убираются.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import express from 'express';
+
 export const ARTISTS = [
   { id: 'kai-angel', name: 'Kai Angel', aliases: ['kai angel', 'кай энджел', 'кай ангел', 'каи энджел'], blacklist: [], whitelist: [] },
   { id: 'madk1d', name: 'madk1d', aliases: ['madk1d'], blacklist: [], whitelist: [] },
@@ -10,6 +16,37 @@ const TTL_MS = 12 * 60 * 60 * 1000;
 const RETRY_AFTER_FAIL_MS = 60 * 1000;
 const MIN_MS = 45_000;
 const MAX_MS = 10 * 60 * 1000;
+
+const REASONS = { 'other-artist': 'Другой исполнитель', remix: 'Ремикс / перезалив', 'ai-cover': 'ИИ-кавер' };
+const BLOCKLIST_FILE = process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json');
+const MAX_REPORTS_PER_HOUR = 30;
+
+let blocked = {};
+try {
+  blocked = JSON.parse(fs.readFileSync(BLOCKLIST_FILE, 'utf8'));
+} catch {
+  blocked = {};
+}
+
+function saveBlocked() {
+  try {
+    fs.mkdirSync(path.dirname(BLOCKLIST_FILE), { recursive: true });
+    fs.writeFileSync(BLOCKLIST_FILE, JSON.stringify(blocked, null, 1));
+  } catch (e) {
+    console.error('Не удалось сохранить список скрытых треков:', e.message);
+  }
+}
+
+const isBlocked = (artistId, trackId) => !!blocked[artistId]?.[trackId];
+
+const reportHits = new Map();
+function tooManyReports(ip) {
+  const now = Date.now();
+  const list = (reportHits.get(ip) ?? []).filter((t) => now - t < 60 * 60 * 1000);
+  list.push(now);
+  reportHits.set(ip, list);
+  return list.length > MAX_REPORTS_PER_HOUR;
+}
 
 const norm = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-z0-9а-я]+/g, ' ').trim();
 const compact = (s) => norm(s).replace(/ /g, '');
@@ -98,7 +135,7 @@ async function build(def, v2) {
 
   const best = new Map();
   for (const t of byId.values()) {
-    if (def.blacklist?.includes(t.id)) continue;
+    if (def.blacklist?.includes(t.id) || isBlocked(def.id, t.id)) continue;
     if (t.policy === 'BLOCK' || t.policy === 'SNIP' || t.access === 'blocked' || t.access === 'preview') continue;
     const ms = t.full_duration ?? t.duration ?? 0;
     if (ms < MIN_MS || ms > MAX_MS) continue;
@@ -170,6 +207,30 @@ export function registerArtistRoutes(app, v2) {
     await ensure(s, v2);
     if (!s.tracks) return res.status(502).json({ error: `Не удалось собрать треки «${s.def.name}». Попробуйте через минуту.` });
     res.json(s.tracks);
+  });
+
+  // Жалоба на трек: «другой исполнитель», «ремикс», «ИИ-кавер». Тело приходит как text/plain (JSON), чтобы не нужен был CORS-предзапрос.
+  app.post('/api/artist-report', express.text({ type: () => true, limit: '2kb' }), (req, res) => {
+    let body;
+    try {
+      body = JSON.parse(req.body);
+    } catch {
+      return res.status(400).json({ error: 'Некорректный запрос' });
+    }
+    const s = state.get(String(body?.artistId ?? ''));
+    const trackId = Number(body?.trackId);
+    const reason = String(body?.reason ?? '');
+    if (!s || !Number.isInteger(trackId) || !Object.prototype.hasOwnProperty.call(REASONS, reason)) {
+      return res.status(400).json({ error: 'Некорректный запрос' });
+    }
+    if (tooManyReports(req.ip)) return res.status(429).json({ error: 'Слишком много жалоб, попробуйте позже' });
+    const track = s.tracks?.find((t) => t.id === trackId);
+    if (!track) return res.status(404).json({ error: 'Трека нет в каталоге' });
+    (blocked[s.def.id] ??= {})[trackId] = { reason, title: track.title, at: new Date().toISOString() };
+    saveBlocked();
+    s.tracks = s.tracks.filter((t) => t.id !== trackId);
+    console.log(`Скрыт трек ${trackId} «${track.title}» у «${s.def.name}»: ${REASONS[reason]}`);
+    res.json({ ok: true, count: s.tracks.length });
   });
 
   (async () => {
