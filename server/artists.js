@@ -3,7 +3,7 @@
 // blacklist: id треков, которые нужно убрать всегда; whitelist: id треков, которые не проверяются на «лишние» слова (ремикс и т.п.).
 export const ARTISTS = [
   { id: 'kai-angel', name: 'Kai Angel', aliases: ['kai angel', 'кай энджел', 'кай ангел', 'каи энджел'], blacklist: [], whitelist: [] },
-  { id: 'madk1d', name: 'madk1d', aliases: ['madk1d', 'madkid', 'мэдкид', 'мадкид'], blacklist: [], whitelist: [] },
+  { id: 'madk1d', name: 'madk1d', aliases: ['madk1d'], blacklist: [], whitelist: [] },
 ];
 
 const TTL_MS = 12 * 60 * 60 * 1000;
