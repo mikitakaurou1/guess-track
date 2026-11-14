@@ -7,6 +7,10 @@
 .artist-name { font-weight: 800; overflow-wrap: anywhere; }
 .artist-count { color: var(--mut); font-size: 13px; }
 .artist-card .btn { width: 100%; justify-content: center; }
+.artist-move { display: flex; gap: 8px; }
+.artist-move .btn { flex: 1; width: auto; }
+.artist-move .flip { display: inline-flex; transform: scaleX(-1); }
+.artists-admin { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .report { display: grid; gap: 10px; justify-items: start; margin-top: 12px; }
 .report-menu { display: flex; flex-wrap: wrap; gap: 8px; }
 .report-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--mut); font-size: 14px; }
