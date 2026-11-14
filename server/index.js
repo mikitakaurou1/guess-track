@@ -1,6 +1,7 @@
 import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import { registerArtistRoutes } from './artists.js';
 
 const PORT = process.env.PORT ?? 3001;
 const MAX_GUESTS = 10;
@@ -180,6 +181,9 @@ app.get('/api/playlist-info', async (req, res) => {
     res.status(502).json({ error: 'Не удалось получить данные плейлиста' });
   }
 });
+
+// Каталоги артистов (Kai Angel, madk1d и др.): см. server/artists.js
+registerArtistRoutes(app, v2);
 
 /* ---------- Комнаты (WebSocket-ретранслятор) ---------- */
 const server = http.createServer(app);

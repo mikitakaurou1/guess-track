@@ -1,0 +1,9 @@
+.artists { display: grid; gap: 12px; }
+.artists-head { font-weight: 700; }
+.artists-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.artist-card { flex: 0 0 168px; scroll-snap-align: start; display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
+.artist-art { width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover; }
+.artist-art-ph { display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--mut); }
+.artist-name { font-weight: 800; overflow-wrap: anywhere; }
+.artist-count { color: var(--mut); font-size: 13px; }
+.artist-card .btn { width: 100%; justify-content: center; }

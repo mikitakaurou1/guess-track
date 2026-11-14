@@ -5,6 +5,8 @@ import type { SourceStat } from '../hooks/useGame';
 import Icon from './Icon';
 import Avatar, { AvatarPicker, avatarOptions } from './Avatar';
 import FeaturedPlaylist from './FeaturedPlaylist';
+import ArtistCarousel from './ArtistCarousel';
+import { ARTIST_PREFIX, artistLabel } from '../services/artistsApi';
 import '../styles/howto.css';
 import '../styles/setup.css';
 import '../styles/setupExtras.css';
@@ -46,9 +48,18 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       return p.length < 5 ? [...p, FEATURED_URL] : p;
     });
   };
+  const addArtist = (id: string) => {
+    const value = ARTIST_PREFIX + id;
+    setUrls(p => {
+      if (p.includes(value)) return p;
+      const i = p.findIndex(x => !x.trim());
+      if (i >= 0) return p.map((x, k) => k === i ? value : x);
+      return p.length < 5 ? [...p, value] : p;
+    });
+  };
   const load = () => {
     const filled = urls.map(u => u.trim()).filter(Boolean);
-    if (!filled.length || filled.some(u => !/(soundcloud\.com|soundcloud\.app\.goo\.gl|snd\.sc)\//.test(u))) { setLocalError('Нужны ссылки именно с SoundCloud (soundcloud.com/… или on.soundcloud.com/…): на профиль или плейлист. Ссылки Spotify, YouTube и других сервисов не подходят.'); return; }
+    if (!filled.length || filled.some(u => !u.startsWith(ARTIST_PREFIX) && !/(soundcloud\.com|soundcloud\.app\.goo\.gl|snd\.sc)\//.test(u))) { setLocalError('Нужны ссылки именно с SoundCloud (soundcloud.com/… или on.soundcloud.com/…): на профиль или плейлист. Ссылки Spotify, YouTube и других сервисов не подходят.'); return; }
     setLocalError(''); onLoadSources(filled);
   };
   if (!total) return <section className='glass'>
@@ -60,7 +71,8 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       <li><span className='howto-num'>3</span><div><b>С телефона, из приложения SoundCloud</b><span>Нажмите «Поделиться» → «Скопировать ссылку» на профиле или плейлисте. Короткие ссылки вида <code>on.soundcloud.com/…</code> тоже подходят.</span></div></li>
     </ul><div className='howto-note'><Icon name='x-circle' size={16}/><span>Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до 5 источников: тогда в игре будет поровну треков от каждого.</span></div></div><button className='howto-more' onClick={() => setHowtoOpen(o => !o)} aria-expanded={howtoOpen}>{howtoOpen ? 'свернуть' : 'ещё'}</button></div>
     <FeaturedPlaylist url={FEATURED_URL} fallbackTitle='GuessTrack' fallbackCreator='nikitkakovrov4' added={hasFeatured} disabled={!canAddFeatured} onAdd={addFeatured}/>
-    {urls.map((u, i) => <div key={i} className='name-field'><span className={`avatar c${i}`}>{i + 1}</span><input className='input' value={u} onChange={e => setUrls(p => p.map((x, k) => k === i ? e.target.value : x))} onKeyDown={e => e.key === 'Enter' && load()} placeholder='Вставьте ссылку SoundCloud: профиль или плейлист'/>{urls.length > 1 && <button className='btn btn-ghost' onClick={() => setUrls(p => p.filter((_, k) => k !== i))}><Icon name='x' size={16}/></button>}</div>)}
+    <ArtistCarousel urls={urls} disabled={!canAddFeatured} onAdd={addArtist}/>
+    {urls.map((u, i) => <div key={i} className='name-field'><span className={`avatar c${i}`}>{i + 1}</span><input className='input' value={u.startsWith(ARTIST_PREFIX) ? `Артист: ${artistLabel(u)}` : u} readOnly={u.startsWith(ARTIST_PREFIX)} onChange={e => setUrls(p => p.map((x, k) => k === i ? e.target.value : x))} onKeyDown={e => e.key === 'Enter' && load()} placeholder='Вставьте ссылку SoundCloud: профиль или плейлист'/>{urls.length > 1 && <button className='btn btn-ghost' onClick={() => setUrls(p => p.filter((_, k) => k !== i))}><Icon name='x' size={16}/></button>}</div>)}
     {urls.length < 5 && <button className='btn btn-ghost' onClick={() => setUrls(p => [...p, ''])}><Icon name='plus' size={16}/> Добавить ещё один источник</button>}
     <button className='btn btn-primary btn-lg' onClick={load} disabled={!ready || busy}>{busy ? 'Загружаем треки...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}</button>
     {(localError || error) && <div className='error'>{localError || error}</div>}

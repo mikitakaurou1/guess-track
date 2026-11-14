@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { gameReducer, initialState, selectCurrentTrack } from '../game/gameReducer';
 import { LOAD_TIMEOUT_MS, type SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { fetchLikes, resolveShortUrl } from '../services/likesApi';
+import { ARTIST_PREFIX, artistLabel, fetchArtistPool } from '../services/artistsApi';
 import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import { DEFAULT_RTT_MS, RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey, type BuzzCandidate } from '../game/buzz';
 import type { GameConfig, Track } from '../types/game';
@@ -13,6 +14,7 @@ export interface SourceStat { label: string; count: number; }
 export interface GameNet { send: (obj: unknown) => void; }
 type Preload = { round: number; trackIndex: number; ok: boolean; promise: Promise<Track | null | undefined> };
 function labelOf(raw: string): string {
+  if (raw.startsWith(ARTIST_PREFIX)) return artistLabel(raw);
   const p = parseSoundCloudUrl(raw); const prefix = 'https://soundcloud.com/';
   if (!p || !p.url.startsWith(prefix)) return raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
   const parts = p.url.slice(prefix.length).split('/');
@@ -213,6 +215,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       const lists: Track[][] = []; const resolved: string[] = [];
       for (const raw of clean) {
         try {
+          if (raw.startsWith(ARTIST_PREFIX)) {
+            lists.push(await fetchArtistPool(raw.slice(ARTIST_PREFIX.length)));
+            resolved.push(raw);
+            continue;
+          }
           let p = parseSoundCloudUrl(raw);
           if (p?.short) p = parseSoundCloudUrl(await resolveShortUrl(raw));
           if (!p) throw new Error('это не похоже на ссылку SoundCloud');
