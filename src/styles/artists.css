@@ -1,10 +1,21 @@
 .artists { display: grid; gap: 12px; }
-.artists-head { font-weight: 700; }
-.artists-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.artists-head { font-weight: 800; font-size: 18px; letter-spacing: -.3px; }
+.artists-sub { line-height: 1.45; }
+.artists-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; -webkit-overflow-scrolling: touch; }
+.artists-row.is-dragging { scroll-snap-type: none; }
+.artists-row::-webkit-scrollbar { height: 8px; }
+.artists-row::-webkit-scrollbar-track { background: rgba(255,255,255,.06); border-radius: 999px; }
+.artists-row::-webkit-scrollbar-thumb { background: var(--grad); border-radius: 999px; box-shadow: 0 0 12px rgba(139,92,246,.5); }
+.artists-row::-webkit-scrollbar-thumb:hover { filter: brightness(1.15); }
+@supports not selector(::-webkit-scrollbar) {
+  .artists-row, .tracks-list { scrollbar-width: thin; scrollbar-color: var(--v) rgba(255,255,255,.06); }
+}
 .artist-card { flex: 0 0 168px; scroll-snap-align: start; display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
-.artist-card[draggable='true'] { cursor: grab; }
-.artist-card.dragging { opacity: .4; }
-.artist-card.drop-target { outline: 2px dashed var(--c); outline-offset: 2px; }
+.artist-card.admin { cursor: grab; user-select: none; -webkit-user-select: none; }
+.artist-card.admin .btn { cursor: pointer; }
+.artist-card.dragging { opacity: .25; outline: 2px dashed var(--c); outline-offset: 2px; }
+.artist-ghost { position: fixed; z-index: 1000; margin: 0; pointer-events: none; opacity: .96; transform: scale(1.05) rotate(2deg); box-shadow: 0 18px 50px rgba(0,0,0,.55), 0 0 30px rgba(139,92,246,.5); backdrop-filter: blur(10px); background: rgba(20,22,40,.9); }
+body.artist-dragging, body.artist-dragging * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 .artist-art { width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover; }
 .artist-art-ph { display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--mut); }
 .artist-name { font-weight: 800; overflow-wrap: anywhere; }
@@ -14,12 +25,18 @@
 .artist-admin-actions .btn { flex: 1; width: auto; cursor: pointer; }
 .artist-admin-actions .is-disabled { opacity: .5; pointer-events: none; }
 .artists-admin { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.admin-login { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.admin-login .input { margin: 0; flex: 1 1 220px; width: auto; }
 .tracks-panel { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
 .tracks-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tracks-actions { margin-left: auto; display: flex; gap: 8px; }
 .tracks-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; display: grid; gap: 6px; }
+.tracks-list::-webkit-scrollbar { width: 8px; }
+.tracks-list::-webkit-scrollbar-track { background: rgba(255,255,255,.06); border-radius: 999px; }
+.tracks-list::-webkit-scrollbar-thumb { background: var(--grad); border-radius: 999px; }
 .tracks-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.04); }
 .tracks-tx { min-width: 0; overflow-wrap: anywhere; }
+.dev-credit { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .report { display: grid; gap: 10px; justify-items: start; margin-top: 12px; }
 .report-menu { display: flex; flex-wrap: wrap; gap: 8px; }
 .report-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--mut); font-size: 14px; }

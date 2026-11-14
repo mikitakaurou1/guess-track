@@ -12,6 +12,7 @@ import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
 import { buildSnapshot } from './game/snapshot';
 import { createReversePlayer } from './services/ReversePlayer';
+import { openAdminLogin } from './services/adminLogin';
 import type { GameConfig } from './types/game';
 const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
 export default function App() {
@@ -38,6 +39,14 @@ export default function App() {
   }, [room.code, room.guests, state, bucket]);
   useEffect(() => { if (room.code) room.send({ t: 'set_open', open: state.phase === 'setup' }); }, [room.code, state.phase, room.send]);
   const reset = () => { reversePlayers?.forEach(p => p.detach()); setReverseSeconds(null); game.reset(); };
+  const taps = useRef<{ n: number; t: ReturnType<typeof setTimeout> | null }>({ n: 0, t: null });
+  const tapDeveloper = () => {
+    const s = taps.current;
+    if (s.t) clearTimeout(s.t);
+    s.n += 1;
+    if (s.n >= 5) { s.n = 0; s.t = null; openAdminLogin(); return; }
+    s.t = setTimeout(() => { s.n = 0; s.t = null; }, 2000);
+  };
   return <><div className='bg-orb orb-1'/><div className='bg-orb orb-2'/><div className='bg-orb orb-3'/><Deco/>
     <main className='wrap'><Logo/><HiddenPlayer refA={iframeA} refB={iframeB}/>
       {mode === 'join' && <GuestApp player={player} initialCode={roomFromUrl()} onBack={() => setMode('host')}/>}
@@ -49,6 +58,6 @@ export default function App() {
         {state.phase !== 'setup' && state.phase !== 'final' && state.config && <GameScreen state={state} track={game.track} positionMs={game.positionMs} soundBlocked={game.soundBlocked} nextBusy={game.nextBusy} onEnableSound={game.enableSound} onBuzz={game.buzz} onSubmit={game.submitAnswer} onTimeout={game.answerTimeout} onSkip={game.skip} onNext={game.next} onFinish={game.finish} onRetry={() => { (reverseSeconds === null ? player : reversePlayers?.[state.round % 2])?.unlock(); game.retry(); }}/>}
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={reset}/>}
       </>}
-      <p className='muted small center-text'>разработчик: mikitakaurou</p>
+      <p className='muted small center-text dev-credit' onClick={tapDeveloper}>разработчик: mikitakaurou</p>
     </main></>;
 }
