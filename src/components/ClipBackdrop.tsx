@@ -2,18 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
-import { loadYouTubeApi } from '../services/youtube';
 import '../styles/clip.css';
 
 interface Props {
-  videoId: string;
+  src: string; // адрес видеофайла на сервере
   sound?: boolean; // пробуем со звуком; если браузер не разрешил, играем без звука
   onState?: (on: boolean) => void; // true, когда клип играет и карточка показана внутри клипа
   children: ReactNode;
 }
 
-export default function ClipBackdrop({ videoId, sound, onState, children }: Props) {
-  const host = useRef<HTMLDivElement>(null);
+export default function ClipBackdrop({ src, sound, onState, children }: Props) {
+  const video = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [off, setOff] = useState(false);
   const stateRef = useRef(onState);
@@ -23,54 +22,39 @@ export default function ClipBackdrop({ videoId, sound, onState, children }: Prop
     return () => stateRef.current?.(false);
   }, [playing, off]);
   useEffect(() => {
+    const el = video.current;
+    if (!el) return;
     let dead = false;
     let started = false;
-    let ready = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    let player: { destroy(): void } | null = null;
-    const fail = () => { if (!dead) setOff(true); };
-    loadYouTubeApi().then((YT) => {
-      if (dead || !host.current) return;
-      const mount = document.createElement('div');
-      host.current.appendChild(mount);
-      player = new YT.Player(mount, {
-        videoId,
-        playerVars: { autoplay: 1, mute: sound ? 0 : 1, controls: 0, disablekb: 1, fs: 0, rel: 0, playsinline: 1, loop: 1, playlist: videoId, modestbranding: 1, iv_load_policy: 3, enablejsapi: 1, origin: window.location.origin },
-        events: {
-          onReady: (e) => {
-            ready = true;
-            console.info('YouTube: плеер готов');
-            if (!sound) e.target.mute();
-            e.target.playVideo();
-            [2500, 5000].forEach((ms) => timers.push(setTimeout(() => { if (!started && !dead) { e.target.mute(); e.target.playVideo(); } }, ms)));
-          },
-          onStateChange: (e) => {
-            console.info('YouTube: состояние плеера', e.data);
-            if (e.data === 1) { started = true; timers.forEach(clearTimeout); setPlaying(true); }
-          },
-          onError: (e) => { console.warn('YouTube: ошибка плеера, код', e.data); fail(); },
-        },
-      });
-      timers.push(setTimeout(() => {
-        if (started) return;
-        console.warn(ready ? 'YouTube: плеер готов, но видео не стартовало за 12 секунд' : 'YouTube: плеер не ответил за 12 секунд (iframe не загрузился или заблокирован)');
-        fail();
-      }, 12000));
-    }).catch((e) => { console.warn('YouTube:', (e as Error).message); fail(); });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onPlaying = () => { started = true; clearTimeout(timer); setPlaying(true); };
+    el.muted = !sound;
+    el.addEventListener('playing', onPlaying);
+    timer = setTimeout(() => {
+      if (!started && !dead) { console.warn('Клип: видео не запустилось за 12 секунд', src); setOff(true); }
+    }, 12000);
+    void el.play().catch((e) => {
+      if (dead) return;
+      console.info('Клип: автозапуск со звуком не разрешён, играем без звука', e);
+      el.muted = true;
+      void el.play().catch(() => { /* сработает таймаут */ });
+    });
     return () => {
       dead = true;
-      timers.forEach(clearTimeout);
-      try { player?.destroy(); } catch { /* уже удалён */ }
+      clearTimeout(timer);
+      el.removeEventListener('playing', onPlaying);
+      el.pause();
     };
-  }, [videoId, sound]);
+  }, [src, sound]);
   if (off) return null;
   return createPortal(
     <div className={`clip-overlay${playing ? ' on' : ''}`} role='dialog' aria-label='Клип трека' aria-hidden={!playing}>
-      <div className='clip-video' ref={host} aria-hidden />
+      <div className='clip-video'>
+        <video ref={video} src={src} loop muted playsInline preload='auto' aria-hidden onError={() => { console.warn('Клип: ошибка загрузки видео', src); setOff(true); }} />
+      </div>
       <div className='clip-shade' />
       <div className='clip-stage'>{playing && children}</div>
       <button className='clip-close' aria-label='Закрыть клип' onClick={() => setOff(true)}><Icon name='x' size={20} /></button>
-      <a className='clip-yt' href={`https://www.youtube.com/watch?v=${videoId}`} target='_blank' rel='noreferrer'>Смотреть на YouTube</a>
     </div>,
     document.body,
   );

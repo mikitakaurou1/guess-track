@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import Icon from './Icon';
 import { adminDeleteTrack, adminEditArtistTrack, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
 import { API_BASE } from '../config';
+import { uploadClip } from '../services/clipUpload';
 import { imageFileToJpegDataUrl } from '../utils/imageData';
 import { notifyCatalogChanged } from '../utils/catalogEvents';
 import type { Track } from '../types/game';
@@ -16,7 +17,6 @@ interface Props {
   onResetCover: (artistId: string) => void;
   onError: (message: string) => void;
 }
-const clipUrl = (id?: string) => (id ? `https://youtu.be/${id}` : '');
 export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetCover, onError }: Props) {
   const [tracks, setTracks] = useState<ListedTrack[] | null>(null);
   const [error, setError] = useState('');
@@ -33,7 +33,8 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const [eTitle, setETitle] = useState('');
   const [eArtist, setEArtist] = useState('');
   const [eCover, setECover] = useState('');
-  const [eClip, setEClip] = useState('');
+  const [eClipFile, setEClipFile] = useState<File | null>(null);
+  const [eClipRemove, setEClipRemove] = useState(false);
   const [eFile, setEFile] = useState<File | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -62,7 +63,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     finally { setBusyId(null); }
   };
   const startEdit = (t: ListedTrack) => {
-    setEditId(t.id); setETitle(t.title); setEArtist(t.artist); setECover(''); setEClip(clipUrl(t.clip)); setEFile(null); setError('');
+    setEditId(t.id); setETitle(t.title); setEArtist(t.artist); setECover(''); setEClipFile(null); setEClipRemove(false); setEFile(null); setError('');
   };
   const refresh = async (id: string) => {
     const fresh = await fetchArtistPool(id);
@@ -78,7 +79,8 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
       const patch: { title?: string; artist?: string; artwork?: string; clip?: string | null } = {};
       if (eTitle.trim() !== t.title) patch.title = eTitle.trim();
       if (eArtist.trim() !== t.artist) patch.artist = eArtist.trim();
-      if (eClip.trim() !== clipUrl(t.clip)) patch.clip = eClip.trim() || null;
+      if (eClipFile) patch.clip = await uploadClip(eClipFile);
+      else if (eClipRemove) patch.clip = null;
       if (eFile) patch.artwork = await imageFileToJpegDataUrl(eFile);
       else if (eCover.trim()) patch.artwork = eCover.trim();
       if (!Object.keys(patch).length) throw new Error('Нет изменений');
@@ -155,11 +157,12 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
         {editId === t.id && <form className='feat-form' onSubmit={saveEdit}>
           <label>Название<input className='input' required maxLength={300} value={eTitle} disabled={editBusy} onChange={e => setETitle(e.target.value)} /></label>
           <label>Исполнитель<input className='input' required maxLength={300} value={eArtist} disabled={editBusy} onChange={e => setEArtist(e.target.value)} /></label>
-          <label>Ссылка на клип YouTube (необязательно)<input className='input' type='url' placeholder='https://youtu.be/…' value={eClip} disabled={editBusy} onChange={e => setEClip(e.target.value)} /></label>
+          <label>Видео-клип (MP4 или WebM, до 50 МБ)<input className='input' type='file' accept='video/mp4,video/webm' disabled={editBusy} onChange={e => { setEClipFile(e.target.files?.[0] ?? null); setEClipRemove(false); }} /></label>
+          {t.clip && <div className='muted small'>Сейчас есть клип: <a href={t.clip} target='_blank' rel='noreferrer'>открыть</a>. <label><input type='checkbox' checked={eClipRemove} disabled={editBusy || !!eClipFile} onChange={e => setEClipRemove(e.target.checked)} /> Убрать клип</label></div>}
           <label>Ссылка на обложку (необязательно)<input className='input' type='url' placeholder='https://…' value={eCover} disabled={editBusy || !!eFile} onChange={e => setECover(e.target.value)} /></label>
           <label>Или файл обложки<input className='input' type='file' accept='image/png,image/jpeg,image/webp,image/gif' disabled={editBusy} onChange={e => setEFile(e.target.files?.[0] ?? null)} /></label>
           <div className='feat-actions'>
-            <button className='btn btn-primary' type='submit' disabled={editBusy}>{editBusy ? 'Сохраняем…' : 'Сохранить'}</button>
+            <button className='btn btn-primary' type='submit' disabled={editBusy}>{editBusy ? (eClipFile ? 'Загружаем видео…' : 'Сохраняем…') : 'Сохранить'}</button>
             <button className='btn btn-ghost' type='button' disabled={editBusy} onClick={() => resetEdit(t.id)}>Сбросить правки</button>
             <button className='btn btn-ghost' type='button' disabled={editBusy} onClick={() => setEditId(null)}>Отмена</button>
           </div>

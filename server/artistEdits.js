@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ARTISTS } from './artists.js';
 import { validateArtwork } from './manualTracks.js';
-import { parseYouTubeId } from './youtube.js';
+import { clipPathOf, isClipPath, clipUrl, removeClipObject } from './clips.js';
 
 const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
 const FILE = process.env.ARTIST_TRACK_EDITS_FILE ?? path.join(DATA_DIR, 'artist-track-edits.json');
@@ -59,7 +59,7 @@ function overlayPool(artistId, list) {
     if (e.artist) { out.artist = e.artist; edited.artist = true; }
     const art = artUrl(artistId, t.id, e);
     if (art) { out.artwork = art; edited.artwork = true; }
-    if (e.clip) out.clip = e.clip;
+    if (isClipPath(e.clip)) out.clip = clipUrl(e.clip);
     const hasEdited = Object.keys(edited).length > 0;
     return hasEdited || out.clip ? { ...out, ...(hasEdited ? { edited } : {}) } : t;
   });
@@ -120,11 +120,13 @@ export function registerArtistEdits(app) {
       if (!v || v.length > 300) return res.status(400).json({ error: 'Название и исполнитель должны быть от 1 до 300 символов' });
       next[f] = v;
     }
+    let oldClip = null;
     if ('clip' in body) {
+      oldClip = isClipPath(next.clip) ? next.clip : null;
       if (body.clip === null) delete next.clip;
       else {
-        const clip = parseYouTubeId(body.clip);
-        if (!clip) return res.status(400).json({ error: 'Не удалось распознать ссылку на видео YouTube' });
+        const clip = clipPathOf(body.clip);
+        if (!clip) return res.status(400).json({ error: 'Некорректный файл клипа' });
         next.clip = clip;
       }
     }
@@ -155,6 +157,7 @@ export function registerArtistEdits(app) {
       console.error('Правки треков артиста:', e.message);
       return res.status(500).json({ error: 'Не удалось сохранить правки на сервере' });
     }
+    if (oldClip && oldClip !== next.clip) void removeClipObject(oldClip);
     res.json({ ok: true });
   });
 }

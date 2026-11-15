@@ -124,7 +124,7 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
     {phase === 'ready' && <><p className='muted'>Обратный отрывок · до {session.seconds} с</p><form className='answer-form' onSubmit={e => { e.preventDefault(); finish(false); }}><input className='input' aria-label='Название трека' placeholder='Название трека' value={text} onChange={e => setText(e.target.value)}/><button className='btn btn-primary' disabled={!text.trim()}>Ответить</button></form><div className='row'><button className='btn btn-ghost' onClick={() => finish(true)}>Пропустить</button><button className='btn btn-ghost' onClick={replace}>Нет звука — заменить</button></div></>}
     {revealEl && <>
       {!clipOn && revealEl}
-      {currentTrack?.clip && <ClipBackdrop key={currentTrack.clip} sound videoId={currentTrack.clip} onState={setClipOn}>{revealEl}</ClipBackdrop>}
+      {currentTrack?.clip && <ClipBackdrop key={currentTrack.clip} sound src={currentTrack.clip} onState={setClipOn}>{revealEl}</ClipBackdrop>}
     </>}
     <button className='btn btn-ghost' onClick={onExit}>Выйти в настройки</button>
   </section>;

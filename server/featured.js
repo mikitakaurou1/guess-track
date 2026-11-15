@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { validateArtwork } from './manualTracks.js';
-import { parseYouTubeId } from './youtube.js';
+import { registerClipRoutes, clipPathOf, isClipPath, clipUrl, removeClipObject } from './clips.js';
 
 export const FEATURED_KEY = 'nikitkakovrov4/sets/guesstrack';
 const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
@@ -54,7 +54,7 @@ function resolvedEdits() {
     const r = {};
     if (e.title) r.title = e.title;
     if (e.artist) r.artist = e.artist;
-    if (e.clip) r.clip = e.clip;
+    if (isClipPath(e.clip)) r.clip = clipUrl(e.clip);
     const a = artUrl(id, e);
     if (a) r.artwork = a;
     if (Object.keys(r).length) out[id] = r;
@@ -77,6 +77,7 @@ const recentFails = (ip) => (failed.get(ip) ?? []).filter((t) => Date.now() - t 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
 
 export function registerFeaturedRoutes(app) {
+  registerClipRoutes(app);
   const textBody = express.text({ type: () => true, limit: '8kb' });
   const bigTextBody = express.text({ type: () => true, limit: '3mb' });
   const parse = (req) => { try { const b = JSON.parse(req.body); return b && typeof b === 'object' ? b : null; } catch { return null; } };
@@ -129,11 +130,13 @@ export function registerFeaturedRoutes(app) {
       if (!v || v.length > 300) return res.status(400).json({ error: 'Название и исполнитель должны быть от 1 до 300 символов' });
       next[f] = v;
     }
+    let oldClip = null;
     if ('clip' in body) {
+      oldClip = isClipPath(next.clip) ? next.clip : null;
       if (body.clip === null) delete next.clip;
       else {
-        const clip = parseYouTubeId(body.clip);
-        if (!clip) return res.status(400).json({ error: 'Не удалось распознать ссылку на видео YouTube' });
+        const clip = clipPathOf(body.clip);
+        if (!clip) return res.status(400).json({ error: 'Некорректный файл клипа' });
         next.clip = clip;
       }
     }
@@ -158,6 +161,7 @@ export function registerFeaturedRoutes(app) {
       save({ ...data, edits });
       if ('artwork' in body) removeCoverFiles(id, keepExt);
     } catch (e) { return fail500(res, e); }
+    if (oldClip && oldClip !== next.clip) void removeClipObject(oldClip);
     res.json({ ok: true });
   });
 

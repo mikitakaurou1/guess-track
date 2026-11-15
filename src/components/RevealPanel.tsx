@@ -69,7 +69,7 @@ export default function RevealPanel({ record, playerNames, isLast, nextBusy, onN
   return (
     <>
       {!clipOn && card}
-      {track.clip && <ClipBackdrop key={track.clip} videoId={track.clip} onState={setClipOn}>{card}</ClipBackdrop>}
+      {track.clip && <ClipBackdrop key={track.clip} src={track.clip} onState={setClipOn}>{card}</ClipBackdrop>}
     </>
   );
 }

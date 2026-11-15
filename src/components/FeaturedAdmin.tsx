@@ -4,13 +4,12 @@ import Icon from './Icon';
 import type { PlaylistTrack } from '../services/playlistInfo';
 import { BAD_PASSWORD, clearAdminKey } from '../services/artistsApi';
 import { featuredEdit, featuredRemove, featuredRestore, fetchFeaturedOverrides, type RemovedTrack } from '../services/featuredApi';
+import { uploadClip } from '../services/clipUpload';
 import { imageFileToJpegDataUrl } from '../utils/imageData';
 import { notifyCatalogChanged } from '../utils/catalogEvents';
 import '../styles/artists.css';
 
 interface Props { tracks: PlaylistTrack[]; onChanged: () => Promise<void>; }
-
-const clipUrl = (id?: string) => (id ? `https://youtu.be/${id}` : '');
 
 export default function FeaturedAdmin({ tracks, onChanged }: Props) {
   const [open, setOpen] = useState(false);
@@ -18,7 +17,8 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
-  const [clip, setClip] = useState('');
+  const [clipFile, setClipFile] = useState<File | null>(null);
+  const [clipRemove, setClipRemove] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -47,7 +47,7 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
   };
   const startEdit = (t: PlaylistTrack) => {
     if (t.id === undefined) return;
-    setEditId(t.id); setTitle(t.title); setArtist(t.artist); setCoverUrl(''); setClip(clipUrl(t.clip)); setFile(null);
+    setEditId(t.id); setTitle(t.title); setArtist(t.artist); setCoverUrl(''); setClipFile(null); setClipRemove(false); setFile(null);
     if (fileRef.current) fileRef.current.value = '';
   };
   const save = (e: FormEvent) => {
@@ -59,7 +59,8 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
       const patch: { title?: string; artist?: string; artwork?: string; clip?: string | null } = {};
       if (title.trim() !== t.title) patch.title = title.trim();
       if (artist.trim() !== t.artist) patch.artist = artist.trim();
-      if (clip.trim() !== clipUrl(t.clip)) patch.clip = clip.trim() || null;
+      if (clipFile) patch.clip = await uploadClip(clipFile);
+      else if (clipRemove) patch.clip = null;
       if (file) patch.artwork = await imageFileToJpegDataUrl(file);
       else if (coverUrl.trim()) patch.artwork = coverUrl.trim();
       if (!Object.keys(patch).length) throw new Error('Нет изменений');
@@ -101,11 +102,12 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
                 <form className='feat-form' onSubmit={save}>
                   <label>Название<input className='input' required maxLength={300} value={title} disabled={busy} onChange={e => setTitle(e.target.value)} /></label>
                   <label>Исполнитель<input className='input' required maxLength={300} value={artist} disabled={busy} onChange={e => setArtist(e.target.value)} /></label>
-                  <label>Ссылка на клип YouTube (необязательно)<input className='input' type='url' placeholder='https://youtu.be/…' value={clip} disabled={busy} onChange={e => setClip(e.target.value)} /></label>
+                  <label>Видео-клип (MP4 или WebM, до 50 МБ)<input className='input' type='file' accept='video/mp4,video/webm' disabled={busy} onChange={e => { setClipFile(e.target.files?.[0] ?? null); setClipRemove(false); }} /></label>
+                  {t.clip && <div className='muted small'>Сейчас есть клип: <a href={t.clip} target='_blank' rel='noreferrer'>открыть</a>. <label><input type='checkbox' checked={clipRemove} disabled={busy || !!clipFile} onChange={e => setClipRemove(e.target.checked)} /> Убрать клип</label></div>}
                   <label>Ссылка на обложку (необязательно)<input className='input' type='url' placeholder='https://…' value={coverUrl} disabled={busy || !!file} onChange={e => setCoverUrl(e.target.value)} /></label>
                   <label>Или файл обложки<input ref={fileRef} className='input' type='file' accept='image/png,image/jpeg,image/webp,image/gif' disabled={busy} onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
                   <div className='feat-actions'>
-                    <button className='btn btn-primary' type='submit' disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>
+                    <button className='btn btn-primary' type='submit' disabled={busy}>{busy ? (clipFile ? 'Загружаем видео…' : 'Сохраняем…') : 'Сохранить'}</button>
                     <button className='btn btn-ghost' type='button' disabled={busy} onClick={() => resetEdits(editId as number)}>Сбросить правки</button>
                     <button className='btn btn-ghost' type='button' disabled={busy} onClick={() => setEditId(null)}>Отмена</button>
                   </div>
