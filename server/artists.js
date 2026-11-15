@@ -1,10 +1,13 @@
-// Каталоги артистов: ищем треки, где артист в авторах или в названии; убираем ремиксы и дубли.
-// Чтобы добавить артиста, допишите объект в ARTISTS. Поиск идёт ТОЛЬКО по написаниям из aliases (точно как написано, без «склеенных» вариантов).
-// titleMatch: false — не искать имя в названии трека (для имён-обычных слов), останутся треки с аккаунта артиста и где он указан автором.
-// blacklist: id треков, которые нужно убрать всегда; whitelist: id треков, которые не проверяются на «лишние» слова (ремикс и т.п.).
-// Треки, помеченные кнопкой «Не тот трек» в игре или удалённые админом, сохраняются в файле (см. BLOCKLIST_FILE) и тоже убираются.
-// Порядок карточек, удаление треков и обложки меняет админ (переменная окружения ADMIN_PASSWORD).
-// Файлы: порядок — ARTIST_ORDER_FILE, обложки — папка ARTIST_COVERS_DIR.
+// Каталоги артистов: берём треки SoundCloud, название которых совпало с песней из списка артиста на Genius (включая фиты).
+// Чтобы добавить артиста, допишите объект в ARTISTS. Поиск на SoundCloud идёт ТОЛЬКО по написаниям из aliases (точно как написано).
+// genius: ссылки на карточки артиста на Genius (слаг из genius.com/artists/<слаг>) и запрос для поиска id. Нужна переменная GENIUS_ACCESS_TOKEN.
+//   Если id найти не удаётся, можно указать его вручную: G('Slug', 'Запрос', 12345).
+// legacy: true — каталог собирается по прежним правилам без Genius (дискография правится вручную).
+// titleMatch: false — не искать имя в названии трека (для имён-обычных слов).
+// blacklist: id треков, которые убрать всегда; whitelist: id треков, которые не проверяются на «лишние» слова (ремикс и т.п.).
+// Если после сверки с Genius осталось меньше MIN_GENIUS_TRACKS треков или Genius недоступен, остаётся список без сверки с Genius.
+// Треки, помеченные кнопкой «Не тот трек» или удалённые админом, хранятся в BLOCKLIST_FILE и тоже убираются.
+// Порядок карточек, удаление треков и обложки меняет админ (ADMIN_PASSWORD). Файлы: порядок — ARTIST_ORDER_FILE, обложки — ARTIST_COVERS_DIR.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -12,42 +15,43 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 const A = (id, name, aliases, extra = {}) => ({ id, name, aliases, blacklist: [], whitelist: [], ...extra });
+const G = (slug, q, id = null) => ({ slug, q, id });
 
 export const ARTISTS = [
-  A('kai-angel', 'Kai Angel', ['Kai Angel']),
-  A('madk1d', 'madk1d', ['madk1d']),
-  A('og-buda', 'OG Buda', ['OG Buda']),
-  A('mayot', 'MAYOT', ['MAYOT']),
-  A('163onmyneck', '163ONMYNECK', ['163ONMYNECK']),
-  A('temnyi-prints', 'темный принц', ['темный принц']),
-  A('villian', 'VILLIAN', ['VILLIAN']),
-  A('friendly-thug-52-ngg', 'FRIENDLY THUG 52 NGG', ['FRIENDLY THUG 52 NGG']),
-  A('kizaru', 'kizaru', ['kizaru']),
-  A('saluki', 'SALUKI', ['SALUKI']),
-  A('lildrughill', 'LILDRUGHILL', ['LILDRUGHILL']),
-  A('rocket', 'ROCKET', ['ROCKET'], { titleMatch: false }),
-  A('fendiglock', 'FENDIGLOCK', ['FENDIGLOCK']),
-  A('t3wkyy-cyanide', 't3wkyy / Cya.niDE', ['t3wkyy', 'Cya.niDE']),
-  A('fortuna-812', 'FORTUNA 812', ['FORTUNA 812']),
-  A('onda-andar', 'ONDA ANDAR', ['ONDA ANDAR']),
-  A('aquakey', 'AQUAKEY', ['AQUAKEY']),
-  A('cupsize', 'CUPSIZE', ['CUPSIZE']),
-  A('uggly', 'Uggly', ['Uggly']),
-  A('babyface-melo', 'Babyface Melo', ['Babyface Melo']),
-  A('dzhon-garik', 'Джон Гарик', ['Джон Гарик']),
-  A('gone-fludd', 'GONE.Fludd', ['GONE.Fludd']),
-  A('toxi', 'Toxi$', ['Toxi$']),
-  A('voskresenskii', 'Voskresenskii', ['Voskresenskii']),
-  A('lovv66', 'LOVV66', ['LOVV66']),
-  A('big-baby-tape', 'Big Baby Tape', ['Big Baby Tape']),
-  A('platina', 'Платина', ['Платина'], { titleMatch: false }),
-  A('pharaoh', 'PHARAOH', ['PHARAOH']),
-  A('deathmarried-yeschapskii', 'deathmarried / Yeschapskii', ['deathmarried', 'Yeschapskii']),
-  A('heronwater', 'Heronwater', ['Heronwater']),
-  A('oxxxymiron', 'Oxxxymiron', ['Oxxxymiron']),
-  A('lsp', 'ЛСП', ['ЛСП']),
-  A('icegergert', 'ICEGERGERT', ['ICEGERGERT']),
-  A('9mice', '9mice', ['9mice']),
+  A('kai-angel', 'Kai Angel', ['Kai Angel'], { genius: [G('Kai-angel', 'Kai Angel')] }),
+  A('madk1d', 'madk1d', ['madk1d'], { genius: [G('Madk1d', 'madk1d')] }),
+  A('og-buda', 'OG Buda', ['OG Buda'], { genius: [G('Og-buda', 'OG Buda')] }),
+  A('mayot', 'MAYOT', ['MAYOT'], { genius: [G('Mayot', 'MAYOT')] }),
+  A('163onmyneck', '163ONMYNECK', ['163ONMYNECK'], { genius: [G('163onmyneck', '163ONMYNECK')] }),
+  A('temnyi-prints', 'темный принц', ['темный принц'], { genius: [G('Darkprinceee', 'темный принц')] }),
+  A('villian', 'VILLIAN', ['VILLIAN'], { genius: [G('Villian', 'VILLIAN')] }),
+  A('friendly-thug-52-ngg', 'FRIENDLY THUG 52 NGG', ['FRIENDLY THUG 52 NGG'], { genius: [G('Friendly-thug-52-ngg', 'FRIENDLY THUG 52 NGG')] }),
+  A('kizaru', 'kizaru', ['kizaru'], { genius: [G('Kizaru', 'kizaru')] }),
+  A('saluki', 'SALUKI', ['SALUKI'], { genius: [G('Saluki', 'SALUKI')] }),
+  A('lildrughill', 'LILDRUGHILL', ['LILDRUGHILL'], { genius: [G('Lildrughill', 'LILDRUGHILL')] }),
+  A('rocket', 'ROCKET', ['ROCKET'], { titleMatch: false, genius: [G('Rocket', 'ROCKET')] }),
+  A('fendiglock', 'FENDIGLOCK', ['FENDIGLOCK'], { genius: [G('Fendiglock', 'FENDIGLOCK')] }),
+  A('t3wkyy-cyanide', 't3wkyy / Cya.niDE', ['t3wkyy', 'Cya.niDE'], { legacy: true }),
+  A('fortuna-812', 'FORTUNA 812', ['FORTUNA 812'], { genius: [G('Fortuna-812', 'FORTUNA 812')] }),
+  A('onda-andar', 'ONDA ANDAR', ['ONDA ANDAR'], { genius: [G('Onda-andar', 'ONDA ANDAR')] }),
+  A('aquakey', 'AQUAKEY', ['AQUAKEY'], { genius: [G('Aquakey', 'AQUAKEY')] }),
+  A('cupsize', 'CUPSIZE', ['CUPSIZE'], { genius: [G('Cupsize', 'CUPSIZE')] }),
+  A('uggly', 'Uggly', ['Uggly'], { genius: [G('Uggly', 'Uggly')] }),
+  A('babyface-melo', 'Babyface Melo', ['Babyface Melo'], { genius: [G('Babyface-melo', 'Babyface Melo')] }),
+  A('dzhon-garik', 'Джон Гарик', ['Джон Гарик'], { genius: [G('John-garik', 'Джон Гарик')] }),
+  A('gone-fludd', 'GONE.Fludd', ['GONE.Fludd'], { genius: [G('Gonefludd', 'GONE.Fludd')] }),
+  A('toxi', 'Toxi$', ['Toxi$'], { genius: [G('Toxi', 'Toxi$')] }),
+  A('voskresenskii', 'Voskresenskii', ['Voskresenskii'], { genius: [G('Voskresenskii', 'Voskresenskii')] }),
+  A('lovv66', 'LOVV66', ['LOVV66'], { genius: [G('Lovv66', 'LOVV66')] }),
+  A('big-baby-tape', 'Big Baby Tape', ['Big Baby Tape'], { genius: [G('Big-baby-tape', 'Big Baby Tape')] }),
+  A('platina', 'Платина', ['Платина'], { titleMatch: false, genius: [G('Platina', 'Платина')] }),
+  A('pharaoh', 'PHARAOH', ['PHARAOH'], { genius: [G('Pharaoh', 'PHARAOH')] }),
+  A('deathmarried-yeschapskii', 'deathmarried / Yeschapskii', ['deathmarried', 'Yeschapskii'], { genius: [G('Deathmarried', 'deathmarried'), G('Yeschapskii', 'Yeschapskii')] }),
+  A('heronwater', 'Heronwater', ['Heronwater'], { genius: [G('Heronwater', 'Heronwater')] }),
+  A('oxxxymiron', 'Oxxxymiron', ['Oxxxymiron'], { genius: [G('Oxxxymiron', 'Oxxxymiron')] }),
+  A('lsp', 'ЛСП', ['ЛСП'], { genius: [G('Lsp', 'ЛСП')] }),
+  A('icegergert', 'ICEGERGERT', ['ICEGERGERT'], { genius: [G('Icegergert', 'ICEGERGERT')] }),
+  A('9mice', '9mice', ['9mice'], { genius: [G('9mice', '9mice')] }),
 ];
 
 const TTL_MS = 12 * 60 * 60 * 1000;
@@ -57,6 +61,8 @@ const MAX_MS = 10 * 60 * 1000;
 const MAX_PARALLEL = 3;
 const PAGE_DELAY_MS = 120;
 const MAX_COVER_BYTES = 1.5 * 1024 * 1024;
+const MIN_GENIUS_TRACKS = 10;
+const GENIUS_TOKEN = process.env.GENIUS_ACCESS_TOKEN;
 
 const REASONS = { 'other-artist': 'Другой исполнитель', remix: 'Ремикс / перезалив', 'ai-cover': 'ИИ-кавер' };
 const BLOCKLIST_FILE = process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json');
@@ -177,9 +183,12 @@ function isStopped(title) {
   return STOP_PHRASES.some((p) => n.includes(` ${p} `)) || STOP_STEMS.some((s) => n.includes(s));
 }
 
+// Метка «сниппет» встречается только в названиях (на SoundCloud и на Genius)
+const isSnippet = (title) => /(snippet|сниппет|снипет|снипп)/.test(norm(title)) || hasPhrase(title, 'snip');
+
 const NOISE = new Set(['official', 'audio', 'video', 'lyrics', 'lyric', 'visualizer', 'hd', 'new', 'single', 'prod', 'by', 'explicit', 'clean', 'album', 'ep', 'премьера', 'клип', 'аудио', 'новинка', 'альбом']);
 
-// Ключ для поиска одинаковых треков: название без скобок, фита, продюсера, имени артиста и «шума»
+// Ключ для сравнения названий: без скобок, фита, продюсера, имени артиста и «шума»
 function dupKey(title, aliasesLower) {
   let s = String(title ?? '').toLowerCase().replace(/ё/g, 'е');
   s = s.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ');
@@ -188,6 +197,28 @@ function dupKey(title, aliasesLower) {
   const key = norm(s).split(' ').filter((t) => t && !NOISE.has(t)).join('');
   return key.length >= 2 ? key : compact(title);
 }
+
+// Для названий SoundCloud вида «Артист x Артист - Название»: пробуем целиком и часть после тире
+function titleKeys(title, aliasesLower) {
+  const keys = [dupKey(title, aliasesLower)];
+  const parts = String(title ?? '').split(/\s+[-–—]\s+/);
+  if (parts.length > 1) keys.push(dupKey(parts.slice(1).join(' - '), aliasesLower));
+  return keys;
+}
+
+// Строгая проверка, что трек можно проиграть в плеере (виджет SoundCloud)
+function isPlayable(t) {
+  if (t.policy === 'BLOCK' || t.policy === 'SNIP') return false;
+  if (t.access && t.access !== 'playable') return false;
+  if (t.streamable === false) return false;
+  if (t.embeddable_by && t.embeddable_by !== 'all') return false;
+  if (t.sharing && t.sharing !== 'public') return false;
+  if (t.state && t.state !== 'finished') return false;
+  if (t.media?.transcodings && !t.media.transcodings.length) return false;
+  if (t.full_duration && t.duration && t.duration < t.full_duration - 2000) return false;
+  return true;
+}
+const isPlayableLegacy = (t) => !(t.policy === 'BLOCK' || t.policy === 'SNIP' || t.access === 'blocked' || t.access === 'preview');
 
 const big = (u) => (u ? String(u).replace('-large', '-t300x300') : null);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -228,13 +259,96 @@ async function pages(v2, first, max) {
   return out;
 }
 
+// ===== Genius =====
+const geniusIdCache = new Map();
+const cleanUrl = (u) => String(u ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
+async function geniusGet(pathAndQuery) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(`https://api.genius.com${pathAndQuery}`, {
+      headers: { Authorization: `Bearer ${GENIUS_TOKEN}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (r.status === 429 && attempt < 2) {
+      await sleep(3000 * (attempt + 1));
+      continue;
+    }
+    if (!r.ok) throw new Error(`Genius ответил ${r.status}`);
+    const data = await r.json();
+    return data.response ?? {};
+  }
+  throw new Error('Genius: слишком много запросов');
+}
+
+async function resolveGeniusId(g) {
+  if (g.id) return g.id;
+  if (geniusIdCache.has(g.slug)) return geniusIdCache.get(g.slug);
+  const want = cleanUrl(`https://genius.com/artists/${g.slug}`);
+  for (let page = 1; page <= 3; page++) {
+    const r = await geniusGet(`/search?q=${encodeURIComponent(g.q)}&per_page=20&page=${page}`);
+    for (const hit of r.hits ?? []) {
+      const song = hit.result ?? {};
+      for (const a of [song.primary_artist, ...(song.featured_artists ?? [])]) {
+        if (a?.id && cleanUrl(a.url) === want) {
+          geniusIdCache.set(g.slug, a.id);
+          return a.id;
+        }
+      }
+    }
+    await sleep(PAGE_DELAY_MS);
+  }
+  throw new Error(`Не найден артист Genius «${g.slug}»`);
+}
+
+async function geniusSongs(id) {
+  const out = [];
+  let page = 1;
+  for (let i = 0; page && i < 30; i++) {
+    const r = await geniusGet(`/artists/${id}/songs?per_page=50&sort=title&page=${page}`);
+    out.push(...(r.songs ?? []));
+    page = r.next_page ?? null;
+    await sleep(PAGE_DELAY_MS);
+  }
+  return out;
+}
+
+async function loadGeniusKeys(def, aliasesLower) {
+  const keys = new Set();
+  let total = 0;
+  for (const g of def.genius ?? []) {
+    const id = await resolveGeniusId(g);
+    for (const song of await geniusSongs(id)) {
+      total++;
+      const title = song.title ?? '';
+      if (!title || isSnippet(title)) continue;
+      keys.add(dupKey(title, aliasesLower));
+    }
+  }
+  return { keys, total };
+}
+
 async function build(def, v2) {
+  const legacy = def.legacy === true;
   const aliasesN = def.aliases.map(norm);
   const aliasesLower = def.aliases.map((a) => a.toLowerCase().replace(/ё/g, 'е'));
   const own = new Set();
   let avatar = null;
   let bestFollowers = -1;
   const raw = [];
+
+  let genius = null;
+  if (!legacy && def.genius?.length) {
+    if (!GENIUS_TOKEN) {
+      console.warn('GENIUS_ACCESS_TOKEN не задан: сверка с Genius отключена');
+    } else {
+      try {
+        genius = await loadGeniusKeys(def, aliasesLower);
+        console.log(`Genius «${def.name}»: ${genius.total} песен, ${genius.keys.size} названий после фильтра сниппетов`);
+      } catch (e) {
+        console.error(`Genius «${def.name}»:`, e.message);
+      }
+    }
+  }
 
   for (const a of def.aliases.slice(0, 3)) {
     try {
@@ -263,21 +377,38 @@ async function build(def, v2) {
   const byId = new Map();
   for (const t of raw) byId.set(t.id, t);
 
-  const best = new Map();
-  for (const t of byId.values()) {
-    if (def.blacklist?.includes(t.id) || isBlocked(def.id, t.id)) continue;
-    if (t.policy === 'BLOCK' || t.policy === 'SNIP' || t.access === 'blocked' || t.access === 'preview') continue;
-    const ms = t.full_duration ?? t.duration ?? 0;
-    if (ms < MIN_MS || ms > MAX_MS) continue;
-    if (!def.whitelist?.includes(t.id) && isStopped(t.title)) continue;
-    if (!isRelated(t)) continue;
-    const key = dupKey(t.title, aliasesLower);
-    const score = (isOwned(t) ? 1e12 : 0) + (t.playback_count ?? 0);
-    const cur = best.get(key);
-    if (!cur || score > cur.score) best.set(key, { t, score });
+  const pick = (keys) => {
+    const best = new Map();
+    for (const t of byId.values()) {
+      if (def.blacklist?.includes(t.id) || isBlocked(def.id, t.id)) continue;
+      if (legacy ? !isPlayableLegacy(t) : !isPlayable(t)) continue;
+      const ms = t.full_duration ?? t.duration ?? 0;
+      if (ms < MIN_MS || ms > MAX_MS) continue;
+      if (!legacy && isSnippet(t.title)) continue;
+      if (!def.whitelist?.includes(t.id) && isStopped(t.title)) continue;
+      if (!isRelated(t)) continue;
+      let key = dupKey(t.title, aliasesLower);
+      if (keys) {
+        const hit = titleKeys(t.title, aliasesLower).find((k) => keys.has(k));
+        if (!hit) continue;
+        key = hit;
+      }
+      const score = (isOwned(t) ? 1e12 : 0) + (t.playback_count ?? 0);
+      const cur = best.get(key);
+      if (!cur || score > cur.score) best.set(key, { t, score });
+    }
+    return [...best.values()];
+  };
+
+  let entries = pick(genius?.keys ?? null);
+  if (genius) {
+    console.log(`Каталог «${def.name}»: после сверки с Genius ${entries.length} треков`);
+    if (entries.length < MIN_GENIUS_TRACKS) {
+      console.warn(`Каталог «${def.name}»: меньше ${MIN_GENIUS_TRACKS} треков после сверки, оставляем список без сверки с Genius`);
+      entries = pick(null);
+    }
   }
 
-  const entries = [...best.values()];
   if (!entries.length) throw new Error('Треки не найдены');
   const top = [...entries].sort((a, b) => b.score - a.score).find((x) => x.t.artwork_url);
   const tracks = entries.map(({ t }) => ({
