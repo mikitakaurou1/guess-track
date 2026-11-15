@@ -1,6 +1,6 @@
 import { API_BASE } from '../config';
 
-export interface PlaylistTrack { title: string; artist: string; }
+export interface PlaylistTrack { id?: number; title: string; artist: string; url?: string; artwork?: string | null; }
 export interface PlaylistInfo { title: string; creator: string; artwork: string | null; tracks?: PlaylistTrack[]; }
 
 const KEY = 'guesstrack:playlist-info:';
@@ -47,7 +47,13 @@ async function viaServer(url: string, signal: AbortSignal): Promise<PlaylistInfo
   const tracks: PlaylistTrack[] | undefined = Array.isArray(b.tracks)
     ? b.tracks
         .filter((t: { title?: unknown }) => t && typeof t.title === 'string')
-        .map((t: { title: string; artist?: unknown }) => ({ title: t.title, artist: typeof t.artist === 'string' ? t.artist : '' }))
+        .map((t: { id?: unknown; title: string; artist?: unknown; url?: unknown; artwork?: unknown }) => ({
+          id: typeof t.id === 'number' ? t.id : undefined,
+          title: t.title,
+          artist: typeof t.artist === 'string' ? t.artist : '',
+          url: typeof t.url === 'string' ? t.url : undefined,
+          artwork: typeof t.artwork === 'string' ? (t.artwork.startsWith('/api/') ? `${API_BASE}${t.artwork}` : t.artwork) : null,
+        }))
     : undefined;
   return { title: typeof b.title === 'string' ? b.title : '', creator: typeof b.creator === 'string' ? b.creator : '', artwork: art, tracks };
 }

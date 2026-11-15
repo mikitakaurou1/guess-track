@@ -5,6 +5,7 @@ export const ARTIST_PREFIX = 'artist:';
 export interface ArtistInfo { id: string; name: string; artwork: string | null; count: number; status: 'ready' | 'building' | 'error'; }
 export type ReportReason = 'other-artist' | 'remix' | 'ai-cover';
 export const BAD_PASSWORD = 'Неверный пароль';
+export const ADMIN_CHANGED_EVENT = 'guesstrack:admin-changed';
 
 const ADMIN_KEY = 'guesstrackAdminKey';
 const names = new Map<string, string>();
@@ -16,9 +17,10 @@ export const artistLabel = (raw: string): string => {
 // Из каталога какого артиста пришёл трек (для кнопки «Не тот трек»)
 export const artistOfTrack = (trackId: number): string | undefined => trackArtist.get(trackId);
 
+const notifyAdminChanged = (): void => { window.dispatchEvent(new Event(ADMIN_CHANGED_EVENT)); };
 export const hasAdminKey = (): boolean => !!localStorage.getItem(ADMIN_KEY);
-export const clearAdminKey = (): void => localStorage.removeItem(ADMIN_KEY);
-const adminPassword = (): string => localStorage.getItem(ADMIN_KEY) ?? '';
+export const clearAdminKey = (): void => { localStorage.removeItem(ADMIN_KEY); notifyAdminChanged(); };
+export const adminPassword = (): string => localStorage.getItem(ADMIN_KEY) ?? '';
 
 async function post(path: string, body: unknown): Promise<void> {
   const r = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
@@ -31,6 +33,7 @@ async function post(path: string, body: unknown): Promise<void> {
 export async function adminLogin(password: string): Promise<void> {
   await post('/api/admin-check', { password });
   localStorage.setItem(ADMIN_KEY, password);
+  notifyAdminChanged();
 }
 
 export async function saveArtistOrder(order: string[]): Promise<void> {

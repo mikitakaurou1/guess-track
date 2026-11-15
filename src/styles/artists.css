@@ -37,6 +37,14 @@ body.artist-dragging, body.artist-dragging * { cursor: grabbing !important; user
 .tracks-list::-webkit-scrollbar-thumb { background: var(--grad); border-radius: 999px; }
 .tracks-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.04); }
 .tracks-tx { min-width: 0; overflow-wrap: anywhere; }
+.feat-admin { display: grid; gap: 10px; }
+.tracks-list li.feat-item { flex-direction: column; align-items: stretch; }
+.feat-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+.feat-thumb { width: 40px; height: 40px; flex: none; border-radius: 8px; object-fit: cover; background: rgba(255,255,255,.08); }
+.feat-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.feat-form { display: grid; gap: 8px; padding-top: 8px; }
+.feat-form label { display: grid; gap: 4px; font-size: 13px; color: var(--mut); }
+.feat-form .input { margin: 0; }
 .dev-credit { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .report { display: grid; gap: 10px; justify-items: start; margin-top: 12px; }
 .report-menu { display: flex; flex-wrap: wrap; gap: 8px; }

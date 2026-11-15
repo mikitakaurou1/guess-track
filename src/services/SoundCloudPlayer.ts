@@ -1,4 +1,5 @@
 import type { Track } from '../types/game';
+import { FEATURED_MATCH, applyFeaturedOverrides, fetchFeaturedOverrides } from './featuredApi';
 
 export const LOAD_TIMEOUT_MS = 10_000;
 
@@ -36,6 +37,18 @@ function computeStartOffset(durationMs: number, clipMs: number, frac: number): n
   const maxStart = durationMs - clipMs - END_MARGIN_MS;
   if (!durationMs || maxStart <= MIN_START_MS + 5000) return 0;
   return Math.round(MIN_START_MS + frac * (maxStart - MIN_START_MS));
+}
+
+// Поля, которые админ изменил вручную, не заменяются данными из виджета SoundCloud
+function keepEdited(track: Track, info: Track): Track {
+  const e = track.edited;
+  if (!e) return info;
+  return {
+    ...info,
+    ...(e.title ? { title: track.title } : {}),
+    ...(e.artist ? { artist: track.artist } : {}),
+    ...(e.artwork && track.artwork ? { artwork: track.artwork } : {}),
+  };
 }
 
 export class SoundCloudPlayer {
@@ -162,7 +175,14 @@ export class SoundCloudPlayer {
     this.widget.pause();
   }
 
-  loadPlaylist(url: string): Promise<Track[]> {
+  // Плейлист GuessTrack дополняется правками админа с сервера (скрытые треки, названия, обложки)
+  async loadPlaylist(url: string): Promise<Track[]> {
+    const list = await this.loadPlaylistRaw(url);
+    if (!url.toLowerCase().includes(FEATURED_MATCH)) return list;
+    return applyFeaturedOverrides(list, await fetchFeaturedOverrides());
+  }
+
+  private loadPlaylistRaw(url: string): Promise<Track[]> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => reject(new Error('Таймаут загрузки. Проверьте ссылку: плейлист должен быть публичным.')),
@@ -323,7 +343,7 @@ export class SoundCloudPlayer {
     if (myToken !== this.token) return undefined;
 
     this.preparedToken = myToken;
-    return info;
+    return keepEdited(track, info);
   }
 
   // Хост, шаг 2: запустить подготовленный трек.

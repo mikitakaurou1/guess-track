@@ -2,6 +2,7 @@ import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { registerArtistRoutes } from './artists.js';
+import { registerFeaturedRoutes, overlayPlaylistInfo } from './featured.js';
 
 const PORT = process.env.PORT ?? 3001;
 const MAX_GUESTS = 10;
@@ -151,7 +152,13 @@ async function playlistTracks(p) {
   return list
     .map((t) => full.get(t.id))
     .filter(Boolean)
-    .map((t) => ({ title: t.title ?? '', artist: t.publisher_metadata?.artist || t.user?.username || '' }));
+    .map((t) => ({
+      id: t.id,
+      title: t.title ?? '',
+      artist: t.publisher_metadata?.artist || t.user?.username || '',
+      url: t.permalink_url ?? '',
+      artwork: t.artwork_url ? String(t.artwork_url).replace('-large', '-t300x300') : t.user?.avatar_url ?? null,
+    }));
 }
 
 // Данные плейлиста для карточки на экране выбора источников: название, автор, обложка, треки. Кэш на 2 минуты.
@@ -164,7 +171,7 @@ app.get('/api/playlist-info', async (req, res) => {
     }
     const clean = `${u.origin}${u.pathname}`;
     const hit = infoCache.get(clean);
-    if (hit && Date.now() - hit.at < 2 * 60 * 1000) return res.json(hit.data);
+    if (hit && Date.now() - hit.at < 2 * 60 * 1000) return res.json(overlayPlaylistInfo(clean, hit.data));
     const p = await v2(`https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(clean)}`);
     if (p.kind !== 'playlist') return res.status(400).json({ error: 'Это не плейлист' });
     const art = p.artwork_url || (p.tracks ?? []).find((t) => t.artwork_url)?.artwork_url || p.user?.avatar_url || null;
@@ -175,7 +182,7 @@ app.get('/api/playlist-info', async (req, res) => {
       tracks: await playlistTracks(p),
     };
     infoCache.set(clean, { at: Date.now(), data });
-    res.json(data);
+    res.json(overlayPlaylistInfo(clean, data));
   } catch (e) {
     console.error(e);
     res.status(502).json({ error: 'Не удалось получить данные плейлиста' });
@@ -184,6 +191,8 @@ app.get('/api/playlist-info', async (req, res) => {
 
 // Каталоги артистов (Kai Angel, madk1d и др.): см. server/artists.js
 registerArtistRoutes(app, v2);
+// Правки админа в плейлисте GuessTrack: см. server/featured.js
+registerFeaturedRoutes(app);
 
 /* ---------- Комнаты (WebSocket-ретранслятор) ---------- */
 const server = http.createServer(app);
