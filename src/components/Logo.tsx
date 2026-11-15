@@ -9,12 +9,17 @@ export default function Logo() {
       <svg className='logo-mark' viewBox='0 0 96 96' width='52' height='52' aria-hidden='true'>
         <defs>
           <linearGradient id='logo-g' x1='0' y1='0' x2='1' y2='1'>
-            <stop offset='0' stopColor='#7b8ed4' />
-            <stop offset='.55' stopColor='#8f82c4' />
-            <stop offset='1' stopColor='#62a8b6' />
+            <stop offset='0' stopColor='#ff6fa8' />
+            <stop offset='.55' stopColor='#c26bff' />
+            <stop offset='1' stopColor='#6f8cff' />
+          </linearGradient>
+          <linearGradient id='logo-shine' x1='0' y1='0' x2='0' y2='1'>
+            <stop offset='0' stopColor='#fff' stopOpacity='.55' />
+            <stop offset='.5' stopColor='#fff' stopOpacity='0' />
           </linearGradient>
         </defs>
         <rect width='96' height='96' rx='30' fill='url(#logo-g)' />
+        <rect width='96' height='96' rx='30' fill='url(#logo-shine)' />
         {BARS.map((h, i) => (
           <rect
             key={i}
