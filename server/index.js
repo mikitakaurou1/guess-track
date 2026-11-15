@@ -2,9 +2,12 @@ import './persist.js';
 import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { registerArtistRoutes } from './artists.js';
-import { registerArtistEdits } from './artistEdits.js';
-import { registerFeaturedRoutes, overlayPlaylistInfo } from './featured.js';
+
+// Модули данных читают файлы с правками сразу при загрузке. Статический import рядом с persist.js выполнился бы
+// одновременно с ним, до конца восстановления файлов из Supabase, поэтому подключаем их динамически и только теперь.
+const { registerArtistRoutes } = await import('./artists.js');
+const { registerArtistEdits } = await import('./artistEdits.js');
+const { registerFeaturedRoutes, overlayPlaylistInfo } = await import('./featured.js');
 
 const PORT = process.env.PORT ?? 3001;
 const MAX_GUESTS = 10;
