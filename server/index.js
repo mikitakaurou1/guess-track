@@ -5,6 +5,8 @@ import { WebSocketServer } from 'ws';
 
 // Модули данных читают файлы с правками сразу при загрузке. Статический import рядом с persist.js выполнился бы
 // одновременно с ним, до конца восстановления файлов из Supabase, поэтому подключаем их динамически и только теперь.
+// Кэш Genius подключаем первым, чтобы запросы каталогов к Genius сразу шли через него.
+await import('./geniusCache.js');
 const { registerArtistRoutes } = await import('./artists.js');
 const { registerArtistEdits } = await import('./artistEdits.js');
 const { registerFeaturedRoutes, overlayPlaylistInfo } = await import('./featured.js');
