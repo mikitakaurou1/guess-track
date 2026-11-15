@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { validateArtwork } from './manualTracks.js';
+import { parseYouTubeId } from './youtube.js';
 
 export const FEATURED_KEY = 'nikitkakovrov4/sets/guesstrack';
 const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
@@ -53,6 +54,7 @@ function resolvedEdits() {
     const r = {};
     if (e.title) r.title = e.title;
     if (e.artist) r.artist = e.artist;
+    if (e.clip) r.clip = e.clip;
     const a = artUrl(id, e);
     if (a) r.artwork = a;
     if (Object.keys(r).length) out[id] = r;
@@ -126,6 +128,14 @@ export function registerFeaturedRoutes(app) {
       const v = String(body[f]).trim();
       if (!v || v.length > 300) return res.status(400).json({ error: 'Название и исполнитель должны быть от 1 до 300 символов' });
       next[f] = v;
+    }
+    if ('clip' in body) {
+      if (body.clip === null) delete next.clip;
+      else {
+        const clip = parseYouTubeId(body.clip);
+        if (!clip) return res.status(400).json({ error: 'Не удалось распознать ссылку на видео YouTube' });
+        next.clip = clip;
+      }
     }
     let write = null; let keepExt;
     if ('artwork' in body) {

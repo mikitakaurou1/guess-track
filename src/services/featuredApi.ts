@@ -4,9 +4,9 @@ import { adminPassword } from './artistsApi';
 
 export const FEATURED_MATCH = 'nikitkakovrov4/sets/guesstrack';
 export interface RemovedTrack { id: number; title: string; artist: string; }
-export interface FeaturedEdit { title?: string; artist?: string; artwork?: string; }
+export interface FeaturedEdit { title?: string; artist?: string; artwork?: string; clip?: string; }
 export interface FeaturedOverrides { removed: RemovedTrack[]; edits: Record<string, FeaturedEdit>; }
-type Patch = { title?: string | null; artist?: string | null; artwork?: string | null };
+type Patch = { title?: string | null; artist?: string | null; artwork?: string | null; clip?: string | null };
 
 async function send(path: string, body: Record<string, unknown>): Promise<void> {
   const r = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ password: adminPassword(), ...body }) });
@@ -44,6 +44,7 @@ export function applyFeaturedOverrides(list: Track[], o: FeaturedOverrides | nul
     if (e.title) { next.title = e.title; edited.title = true; }
     if (e.artist) { next.artist = e.artist; edited.artist = true; }
     if (e.artwork) { next.artwork = absolute(e.artwork); edited.artwork = true; }
+    if (e.clip) next.clip = e.clip;
     return { ...next, edited };
   });
 }

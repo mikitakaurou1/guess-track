@@ -6,6 +6,7 @@ import { shuffle } from '../utils/shuffle';
 import { isCorrectAnswer } from '../utils/answerMatcher';
 import FinalScreen from './FinalScreen';
 import ReverseAudio from './ReverseAudio';
+import ClipBackdrop from './ClipBackdrop';
 import Icon from './Icon';
 import '../styles/reverse.css';
 
@@ -103,6 +104,7 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
     const [replacement, ...reserve] = session.reserve;
     setSession({ ...session, reserve, tracks: session.tracks.map((t, i) => i === round ? replacement : t) });
   };
+  const goNext = () => { setAudioUrl(''); if (round + 1 === session.tracks.length) setPhase('final'); else setRound(r => r + 1); };
   if (phase === 'final') return <><FinalScreen names={config.playerNames} avatars={config.avatars} scores={[score]} history={history} onRestart={onExit}/><button className='btn btn-ghost' onClick={onExit}>К режимам</button></>;
   return <section className='glass reverse-game'>
     <div className='row between'><h2>Перевертыш</h2><span>Трек {round + 1} / {session.tracks.length} · {score} очков</span></div>
@@ -115,7 +117,8 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
       {currentTrack.artwork ? <img className='reverse-cover' src={currentTrack.artwork.replace('-large', '-t300x300')} alt=''/> : <div className='reverse-cover reverse-cover-empty'><Icon name='disc' size={48}/></div>}
       <div className='reverse-track-info'><div className='reverse-track-title'>{currentTrack.title}</div><div className='muted'>{currentTrack.artist}</div></div>
       <div className='reverse-points'><b className='grad'>{history[history.length - 1]?.result.kind === 'correct' ? '+1' : '0'}</b><span>баллов</span></div>
-    </div><button className='btn btn-primary btn-lg' onClick={() => { setAudioUrl(''); if (round + 1 === session.tracks.length) setPhase('final'); else setRound(r => r + 1); }}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button></>}
+    </div><button className='btn btn-primary btn-lg' onClick={goNext}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button>
+    {currentTrack.clip && <ClipBackdrop key={currentTrack.clip} sound videoId={currentTrack.clip} title={currentTrack.title} artist={currentTrack.artist} isLast={round + 1 === session.tracks.length} onNext={goNext}/>}</>}
     <button className='btn btn-ghost' onClick={onExit}>Выйти в настройки</button>
   </section>;
 }

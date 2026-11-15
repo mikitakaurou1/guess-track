@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ARTISTS } from './artists.js';
 import { validateArtwork } from './manualTracks.js';
+import { parseYouTubeId } from './youtube.js';
 
 const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
 const FILE = process.env.ARTIST_TRACK_EDITS_FILE ?? path.join(DATA_DIR, 'artist-track-edits.json');
@@ -58,7 +59,9 @@ function overlayPool(artistId, list) {
     if (e.artist) { out.artist = e.artist; edited.artist = true; }
     const art = artUrl(artistId, t.id, e);
     if (art) { out.artwork = art; edited.artwork = true; }
-    return Object.keys(edited).length ? { ...out, edited } : t;
+    if (e.clip) out.clip = e.clip;
+    const hasEdited = Object.keys(edited).length > 0;
+    return hasEdited || out.clip ? { ...out, ...(hasEdited ? { edited } : {}) } : t;
   });
 }
 
@@ -116,6 +119,14 @@ export function registerArtistEdits(app) {
       const v = String(body[f]).trim();
       if (!v || v.length > 300) return res.status(400).json({ error: 'Название и исполнитель должны быть от 1 до 300 символов' });
       next[f] = v;
+    }
+    if ('clip' in body) {
+      if (body.clip === null) delete next.clip;
+      else {
+        const clip = parseYouTubeId(body.clip);
+        if (!clip) return res.status(400).json({ error: 'Не удалось распознать ссылку на видео YouTube' });
+        next.clip = clip;
+      }
     }
     let write = null; let keepExt;
     if ('artwork' in body) {

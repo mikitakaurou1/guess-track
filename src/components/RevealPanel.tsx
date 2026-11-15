@@ -1,6 +1,7 @@
 import type { RoundRecord } from '../types/game';
 import Icon, { type IconName } from './Icon';
 import Cover from './Cover';
+import ClipBackdrop from './ClipBackdrop';
 
 interface Props {
   record: RoundRecord;
@@ -26,40 +27,45 @@ export default function RevealPanel({ record, playerNames, isLast, nextBusy, onN
   const icon: IconName = ok ? 'check-circle' : result.kind === 'skipped' ? 'skip' : 'x-circle';
 
   return (
-    <div className={`reveal glass-inner ${ok ? 'ok' : 'bad'}`}>
-      <div className={`verdict ${kind}`}>
-        <Icon name={icon} size={22} />
-        {verdict}
-      </div>
+    <>
+      <div className={`reveal glass-inner ${ok ? 'ok' : 'bad'}`}>
+        <div className={`verdict ${kind}`}>
+          <Icon name={icon} size={22} />
+          {verdict}
+        </div>
 
-      <div className="reveal-main">
-        <Cover src={track.artwork} size="lg" />
-        <div className="reveal-text">
-          <div className="reveal-title">{track.title || 'Название недоступно'}</div>
-          {track.artist && <div className="muted">{track.artist}</div>}
+        <div className="reveal-main">
+          <Cover src={track.artwork} size="lg" />
+          <div className="reveal-text">
+            <div className="reveal-title">{track.title || 'Название недоступно'}</div>
+            {track.artist && <div className="muted">{track.artist}</div>}
+          </div>
+        </div>
+
+        {attempts.length > 0 && (
+          <ul className="attempts">
+            {attempts.map((a, i) => (
+              <li key={i} className={a.correct ? 'yes' : 'no'}>
+                <b>{playerNames[a.playerIndex]}</b>: {a.timeout ? 'не успел(а) ответить' : `«${a.text}»`}
+                <span>{a.correct ? ' — верно' : ' — неверно'}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="row center">
+          <a className="btn btn-ghost" href={track.url} target="_blank" rel="noreferrer">Открыть в SoundCloud</a>
+          {onNext && (
+            <button className="btn btn-primary" onClick={onNext} disabled={nextBusy}>
+              {nextBusy ? 'Загружаем следующий трек…' : isLast ? 'К итогам' : 'Дальше'}
+              {!nextBusy && <Icon name="arrow-right" size={16} />}
+            </button>
+          )}
         </div>
       </div>
-
-      {attempts.length > 0 && (
-        <ul className="attempts">
-          {attempts.map((a, i) => (
-            <li key={i} className={a.correct ? 'yes' : 'no'}>
-              <b>{playerNames[a.playerIndex]}</b>: {a.timeout ? 'не успел(а) ответить' : `«${a.text}»`}
-              <span>{a.correct ? ' — верно' : ' — неверно'}</span>
-            </li>
-          ))}
-        </ul>
+      {track.clip && (
+        <ClipBackdrop key={track.clip} videoId={track.clip} title={track.title} artist={track.artist} isLast={isLast} nextBusy={nextBusy} onNext={onNext} />
       )}
-
-      <div className="row center">
-        <a className="btn btn-ghost" href={track.url} target="_blank" rel="noreferrer">Открыть в SoundCloud</a>
-        {onNext && (
-          <button className="btn btn-primary" onClick={onNext} disabled={nextBusy}>
-            {nextBusy ? 'Загружаем следующий трек…' : isLast ? 'К итогам' : 'Дальше'}
-            {!nextBusy && <Icon name="arrow-right" size={16} />}
-          </button>
-        )}
-      </div>
-    </div>
+    </>
   );
 }

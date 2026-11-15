@@ -9,12 +9,15 @@ import '../styles/artists.css';
 
 interface Props { tracks: PlaylistTrack[]; onChanged: () => Promise<void>; }
 
+const clipUrl = (id?: string) => (id ? `https://youtu.be/${id}` : '');
+
 export default function FeaturedAdmin({ tracks, onChanged }: Props) {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [clip, setClip] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +45,7 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
   };
   const startEdit = (t: PlaylistTrack) => {
     if (t.id === undefined) return;
-    setEditId(t.id); setTitle(t.title); setArtist(t.artist); setCoverUrl(''); setFile(null);
+    setEditId(t.id); setTitle(t.title); setArtist(t.artist); setCoverUrl(''); setClip(clipUrl(t.clip)); setFile(null);
     if (fileRef.current) fileRef.current.value = '';
   };
   const save = (e: FormEvent) => {
@@ -51,9 +54,10 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
     if (!t || t.id === undefined) return;
     const id = t.id;
     void run(async () => {
-      const patch: { title?: string; artist?: string; artwork?: string } = {};
+      const patch: { title?: string; artist?: string; artwork?: string; clip?: string | null } = {};
       if (title.trim() !== t.title) patch.title = title.trim();
       if (artist.trim() !== t.artist) patch.artist = artist.trim();
+      if (clip.trim() !== clipUrl(t.clip)) patch.clip = clip.trim() || null;
       if (file) patch.artwork = await imageFileToJpegDataUrl(file);
       else if (coverUrl.trim()) patch.artwork = coverUrl.trim();
       if (!Object.keys(patch).length) throw new Error('Нет изменений');
@@ -62,8 +66,8 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
     });
   };
   const resetEdits = (id: number) => {
-    if (!confirm('Вернуть название, исполнителя и обложку из SoundCloud?')) return;
-    void run(async () => { await featuredEdit(id, { title: null, artist: null, artwork: null }); setEditId(null); });
+    if (!confirm('Вернуть название, исполнителя и обложку из SoundCloud и убрать клип?')) return;
+    void run(async () => { await featuredEdit(id, { title: null, artist: null, artwork: null, clip: null }); setEditId(null); });
   };
   const remove = (t: PlaylistTrack) => {
     const id = t.id;
@@ -85,7 +89,7 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
             <li key={t.id} className='feat-item'>
               <div className='feat-row'>
                 {t.artwork ? <img className='feat-thumb' src={t.artwork} alt='' referrerPolicy='no-referrer' /> : <div className='feat-thumb' />}
-                <div className='tracks-tx'><div>{t.title}</div><div className='muted small'>{t.artist}</div></div>
+                <div className='tracks-tx'><div>{t.title}</div><div className='muted small'>{t.artist}{t.clip ? ' · есть клип' : ''}</div></div>
                 <div className='feat-actions'>
                   <button className='btn btn-ghost' disabled={busy} onClick={() => startEdit(t)}>Править</button>
                   <button className='btn btn-ghost' aria-label={`Убрать ${t.title}`} disabled={busy} onClick={() => remove(t)}><Icon name='x' size={16} /></button>
@@ -95,6 +99,7 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
                 <form className='feat-form' onSubmit={save}>
                   <label>Название<input className='input' required maxLength={300} value={title} disabled={busy} onChange={e => setTitle(e.target.value)} /></label>
                   <label>Исполнитель<input className='input' required maxLength={300} value={artist} disabled={busy} onChange={e => setArtist(e.target.value)} /></label>
+                  <label>Ссылка на клип YouTube (необязательно)<input className='input' type='url' placeholder='https://youtu.be/…' value={clip} disabled={busy} onChange={e => setClip(e.target.value)} /></label>
                   <label>Ссылка на обложку (необязательно)<input className='input' type='url' placeholder='https://…' value={coverUrl} disabled={busy || !!file} onChange={e => setCoverUrl(e.target.value)} /></label>
                   <label>Или файл обложки<input ref={fileRef} className='input' type='file' accept='image/png,image/jpeg,image/webp,image/gif' disabled={busy} onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
                   <div className='feat-actions'>

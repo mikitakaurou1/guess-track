@@ -15,6 +15,7 @@ interface Props {
   onResetCover: (artistId: string) => void;
   onError: (message: string) => void;
 }
+const clipUrl = (id?: string) => (id ? `https://youtu.be/${id}` : '');
 export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetCover, onError }: Props) {
   const [tracks, setTracks] = useState<ListedTrack[] | null>(null);
   const [error, setError] = useState('');
@@ -31,6 +32,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const [eTitle, setETitle] = useState('');
   const [eArtist, setEArtist] = useState('');
   const [eCover, setECover] = useState('');
+  const [eClip, setEClip] = useState('');
   const [eFile, setEFile] = useState<File | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -58,7 +60,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     finally { setBusyId(null); }
   };
   const startEdit = (t: ListedTrack) => {
-    setEditId(t.id); setETitle(t.title); setEArtist(t.artist); setECover(''); setEFile(null); setError('');
+    setEditId(t.id); setETitle(t.title); setEArtist(t.artist); setECover(''); setEClip(clipUrl(t.clip)); setEFile(null); setError('');
   };
   const refresh = async (id: string) => {
     const fresh = await fetchArtistPool(id);
@@ -70,9 +72,10 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     if (!t || editBusy) return;
     const id = artist.id; setEditBusy(true); setError('');
     try {
-      const patch: { title?: string; artist?: string; artwork?: string } = {};
+      const patch: { title?: string; artist?: string; artwork?: string; clip?: string | null } = {};
       if (eTitle.trim() !== t.title) patch.title = eTitle.trim();
       if (eArtist.trim() !== t.artist) patch.artist = eArtist.trim();
+      if (eClip.trim() !== clipUrl(t.clip)) patch.clip = eClip.trim() || null;
       if (eFile) patch.artwork = await imageFileToJpegDataUrl(eFile);
       else if (eCover.trim()) patch.artwork = eCover.trim();
       if (!Object.keys(patch).length) throw new Error('Нет изменений');
@@ -82,10 +85,11 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     finally { setEditBusy(false); }
   };
   const resetEdit = async (trackId: number) => {
-    if (!confirm('Вернуть название, исполнителя и обложку из SoundCloud?')) return;
+    if (!confirm('Вернуть название, исполнителя и обложку из SoundCloud и убрать клип?')) return;
     const id = artist.id; setEditBusy(true); setError('');
     try {
-      await adminEditArtistTrack(id, trackId, { title: null, artist: null, artwork: null });
+      const patch = { title: null, artist: null, artwork: null, clip: null };
+      await adminEditArtistTrack(id, trackId, patch);
       await refresh(id);
     } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
     finally { setEditBusy(false); }
@@ -137,7 +141,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
           {t.artwork ? <img className='feat-thumb' src={t.artwork} alt='' referrerPolicy='no-referrer' /> : <div className='feat-thumb' />}
           <div className='tracks-tx'>
             <a href={t.url} target='_blank' rel='noreferrer'>{t.title}</a>
-            <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}</div>
+            <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}{t.clip ? ' · есть клип' : ''}</div>
           </div>
           <div className='feat-actions'>
             <button className='btn btn-ghost' disabled={locked} onClick={() => startEdit(t)}>Править</button>
@@ -147,6 +151,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
         {editId === t.id && <form className='feat-form' onSubmit={saveEdit}>
           <label>Название<input className='input' required maxLength={300} value={eTitle} disabled={editBusy} onChange={e => setETitle(e.target.value)} /></label>
           <label>Исполнитель<input className='input' required maxLength={300} value={eArtist} disabled={editBusy} onChange={e => setEArtist(e.target.value)} /></label>
+          <label>Ссылка на клип YouTube (необязательно)<input className='input' type='url' placeholder='https://youtu.be/…' value={eClip} disabled={editBusy} onChange={e => setEClip(e.target.value)} /></label>
           <label>Ссылка на обложку (необязательно)<input className='input' type='url' placeholder='https://…' value={eCover} disabled={editBusy || !!eFile} onChange={e => setECover(e.target.value)} /></label>
           <label>Или файл обложки<input className='input' type='file' accept='image/png,image/jpeg,image/webp,image/gif' disabled={editBusy} onChange={e => setEFile(e.target.files?.[0] ?? null)} /></label>
           <div className='feat-actions'>
