@@ -14,10 +14,13 @@ export const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(pat
 const known = new Map();
 let busy = false;
 
+// Новые ключи sb_secret_... не JWT: они отправляются только в apikey. Старый service_role (JWT) дублируется в Authorization.
+const authHeaders = () => (KEY.startsWith('sb_') ? { apikey: KEY } : { apikey: KEY, Authorization: `Bearer ${KEY}` });
+
 async function api(query, init = {}) {
   const r = await fetch(`${BASE}/rest/v1/${TABLE}${query}`, {
     ...init,
-    headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'content-type': 'application/json', ...init.headers },
+    headers: { ...authHeaders(), 'content-type': 'application/json', ...init.headers },
     signal: AbortSignal.timeout(20_000),
   });
   if (!r.ok) throw new Error(`Supabase ответил ${r.status}: ${(await r.text()).slice(0, 200)}`);
