@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { gameReducer, initialState, selectCurrentTrack } from '../game/gameReducer';
 import { LOAD_TIMEOUT_MS, type SoundCloudPlayer } from '../services/SoundCloudPlayer';
 import { fetchLikes, resolveShortUrl } from '../services/likesApi';
-import { ARTIST_PREFIX, artistLabel, fetchArtistPool } from '../services/artistsApi';
+import { ARTIST_PREFIX, artistLabel, artistOfTrack, fetchArtistPool, reportUnplayable } from '../services/artistsApi';
 import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import { DEFAULT_RTT_MS, RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey, type BuzzCandidate } from '../game/buzz';
 import type { GameConfig, Track } from '../types/game';
@@ -34,6 +34,11 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const preloadRef = useRef<Preload | null>(null);
   const tapStartRef = useRef<{ round: number; trackIndex: number } | null>(null);
   const readyRef = useRef(new Map<string, Set<string>>());
+  const pendingFailsRef = useRef(new Set<number>());
+  const flushFailures = useCallback(() => {
+    const ids = [...pendingFailsRef.current]; pendingFailsRef.current.clear();
+    for (const id of ids) { const artistId = artistOfTrack(id); if (artistId) void reportUnplayable(artistId, id); }
+  }, []);
   const first = players?.[0] ?? null;
   const track = selectCurrentTrack(state);
   const waitForGuests = (key: string, maxMs: number) => new Promise<void>(resolve => {
@@ -117,14 +122,14 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const offs = players.map((p, i) => p.onProgress(pos => {
       const s = stateRef.current;
       if (i !== s.round % 2) return;
-      if (s.phase === 'loading') dispatch({ type: 'TRACK_STARTED' });
+      if (s.phase === 'loading') { dispatch({ type: 'TRACK_STARTED' }); flushFailures(); }
       if (s.phase === 'playing' || s.phase === 'loading') {
         setPositionMs(pos);
         if (s.config && pos >= s.config.clipSeconds * 1000) dispatch({ type: 'CLIP_ENDED' });
       }
     }));
     return () => offs.forEach(off => off());
-  }, [players]);
+  }, [players, flushFailures]);
   useEffect(() => { if (state.phase !== 'loading') setSoundBlocked(false); }, [state.phase]);
   useEffect(() => {
     if (!players || state.phase !== 'playing') return;
@@ -148,7 +153,12 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const remote = (state.config?.owners ?? []).some(o => o !== null);
     let cancelled = false; setPositionMs(0); setSoundBlocked(false);
     const fail = () => { tapStartRef.current = null; dispatch({ type: 'TRACK_FAILED', attempt }); };
-    const wdLoad = setTimeout(fail, state.config?.reverse ? 200000 : LOAD_TIMEOUT_MS);
+    const failTrack = () => {
+      const t = stateRef.current.tracks[trackIndex];
+      if (t && !state.config?.reverse && navigator.onLine) pendingFailsRef.current.add(t.id);
+      fail();
+    };
+    const wdLoad = setTimeout(failTrack, state.config?.reverse ? 200000 : LOAD_TIMEOUT_MS);
     let wdStart: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       let info: Track | null | undefined; let fromPreload = false;
@@ -159,7 +169,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       }
       if (!info) info = await player.prepareTrack(state.tracks[trackIndex], remote);
       if (cancelled || info === undefined) return;
-      if (info === null) { fail(); return; }
+      if (info === null) { failTrack(); return; }
       clearTimeout(wdLoad); dispatch({ type: 'TRACK_INFO', trackIndex, info });
       const tapped = tapStartRef.current?.round === state.round && tapStartRef.current.trackIndex === trackIndex;
       if (!tapped) {
@@ -172,7 +182,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
         if (cancelled) return;
         if (!started) { fail(); return; }
       }
-      wdStart = setTimeout(() => { if (TOUCH || state.config?.reverse) setSoundBlocked(true); else fail(); }, START_TIMEOUT_MS);
+      wdStart = setTimeout(() => { if (TOUCH || state.config?.reverse) setSoundBlocked(true); else failTrack(); }, START_TIMEOUT_MS);
     })();
     return () => { cancelled = true; clearTimeout(wdLoad); if (wdStart) clearTimeout(wdStart); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +251,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     } catch (e) { setLoadError((e as Error).message); } finally { setIsLoadingPlaylist(false); }
   }, [first]);
   const startGame = useCallback((config: GameConfig) => {
-    readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true);
+    readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null; pendingFailsRef.current.clear(); setPreloadDone(true);
     dispatch({ type: 'START', config, tracks: playlist });
   }, [playlist]);
   const buzz = useCallback((p: number) => enqueueBuzz(p, null), [enqueueBuzz]);
@@ -263,6 +273,6 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   return { state, track, playlist, sources, positionMs, loadError, isLoadingPlaylist, soundBlocked, enableSound, nextBusy, loadSources, nextPing,
     clearPlaylist: () => { setPlaylist([]); setSources([]); }, startGame, buzz, submitAnswer, handleRemote,
     answerTimeout: useCallback(() => dispatch({ type: 'TIMEOUT', ms: answerMs() }), [answerMs]), skip: () => dispatch({ type: 'SKIP' }),
-    next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; setPreloadDone(true); dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
+    next, finish: () => dispatch({ type: 'FINISH' }), reset: () => { preloadRef.current = null; tapStartRef.current = null; pendingFailsRef.current.clear(); setPreloadDone(true); dispatch({ type: 'RESET' }); }, retry: () => dispatch({ type: 'RETRY' }),
   };
 }

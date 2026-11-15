@@ -52,11 +52,16 @@ const MAX_PARALLEL = 3;
 const PAGE_DELAY_MS = 120;
 const MAX_COVER_BYTES = 1.5 * 1024 * 1024;
 const MIN_GENIUS_TRACKS = 10;
+const UNPIN_AFTER = 2;
+const FAIL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const SAME_REPORTER_GAP_MS = 30 * 60 * 1000;
+const MAX_UNPLAYABLE_PER_HOUR = 200;
 const GENIUS_TOKEN = process.env.GENIUS_ACCESS_TOKEN;
 const REASONS = { 'other-artist': 'Другой исполнитель', remix: 'Ремикс / перезалив', 'ai-cover': 'ИИ-кавер' };
 const BLOCKLIST_FILE = process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json');
 const ORDER_FILE = process.env.ARTIST_ORDER_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'artist-order.json');
 const COVERS_DIR = process.env.ARTIST_COVERS_DIR ?? path.join(path.dirname(BLOCKLIST_FILE), 'covers');
+const FAILURES_FILE = process.env.TRACK_FAILURES_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'track-failures.json');
 const MAX_REPORTS_PER_HOUR = 30;
 const MAX_FAILED_LOGINS_PER_HOUR = 10;
 function readJson(file, fallback) {
@@ -70,6 +75,9 @@ const blocked = readJson(BLOCKLIST_FILE, {});
 const saveBlocked = () => writeJson(BLOCKLIST_FILE, blocked, 'список скрытых треков');
 const isBlocked = (artistId, trackId) => !!blocked[artistId]?.[trackId];
 const manual = createManualTracks(BLOCKLIST_FILE);
+let failures = readJson(FAILURES_FILE, {});
+if (!failures || typeof failures !== 'object' || Array.isArray(failures)) failures = {};
+const saveFailures = () => { try { writeJson(FAILURES_FILE, failures, 'счётчики ошибок воспроизведения'); } catch { /* не критично */ } };
 let order = readJson(ORDER_FILE, []);
 if (!Array.isArray(order)) order = [];
 order = order.map(String);
@@ -107,6 +115,13 @@ function tooManyReports(ip) {
   const list = (reportHits.get(ip) ?? []).filter(t => now - t < 3600_000);
   list.push(now); reportHits.set(ip, list); return list.length > MAX_REPORTS_PER_HOUR;
 }
+const unplayableHits = new Map();
+function tooManyUnplayable(ip) {
+  const now = Date.now();
+  const list = (unplayableHits.get(ip) ?? []).filter(t => now - t < 3600_000);
+  list.push(now); unplayableHits.set(ip, list); return list.length > MAX_UNPLAYABLE_PER_HOUR;
+}
+const reporterHash = ip => crypto.createHash('sha256').update(`guesstrack:${ip}`).digest('hex').slice(0, 12);
 const failedLogins = new Map();
 const recentFails = ip => (failedLogins.get(ip) ?? []).filter(t => Date.now() - t < 3600_000);
 function noteFail(ip) { failedLogins.set(ip, [...recentFails(ip), Date.now()]); }
@@ -342,6 +357,36 @@ export function registerArtistRoutes(app, v2) {
     try { saveBlocked(); } catch { blocked[s.def.id] = previous; return res.status(500).json({ error: 'Не удалось сохранить блокировку' }); }
     if (s.tracks) s.tracks = s.tracks.filter(t => t.id !== trackId);
     res.json({ ok: true, count: combined(s).length });
+  });
+  // Игра сообщает, что трек артиста не загрузился или не стартовал в плеере, а следующий трек в той же игре заиграл.
+  // Трек открепляется, если SoundCloud сам подтверждает недоступность или если сообщений набралось UNPIN_AFTER.
+  app.post('/api/artist-unplayable', textBody, async (req, res) => {
+    const body = parseBody(req); if (!body) return res.status(400).json({ error: 'Некорректный запрос' });
+    const s = state.get(String(body.artistId ?? '')); const trackId = Number(body.trackId);
+    if (!s || !Number.isSafeInteger(trackId) || trackId <= 0) return res.status(400).json({ error: 'Некорректный запрос' });
+    if (s.def.legacy) return res.json({ ok: true, ignored: true });
+    if (tooManyUnplayable(req.ip)) return res.status(429).json({ error: 'Слишком много сообщений, попробуйте позже' });
+    const track = combined(s).find(t => t.id === trackId);
+    if (!track || track.manual) return res.json({ ok: true, ignored: true });
+    const key = `${s.def.id}:${trackId}`; const now = Date.now(); const h = reporterHash(req.ip);
+    const events = (failures[key] ?? []).filter(e => now - e.at < FAIL_WINDOW_MS);
+    if (events.some(e => e.h === h && now - e.at < SAME_REPORTER_GAP_MS)) return res.json({ ok: true, ignored: true });
+    const first = events.length === 0;
+    events.push({ h, at: now }); failures[key] = events; saveFailures();
+    let cause = null;
+    if (events.length >= UNPIN_AFTER) cause = 'repeated-failures';
+    else if (first) {
+      try { const t = await v2(`https://api-v2.soundcloud.com/tracks/${trackId}`); if (!isPlayable(t)) cause = 'soundcloud-unavailable'; }
+      catch (e) { if (e.status === 404) cause = 'soundcloud-removed'; }
+    }
+    if (!cause) return res.json({ ok: true, unpinned: false });
+    const previous = blocked[s.def.id];
+    blocked[s.def.id] = { ...(previous ?? {}), [trackId]: { reason: 'unplayable', cause, title: track.title, at: new Date().toISOString() } };
+    try { saveBlocked(); } catch { blocked[s.def.id] = previous; return res.status(500).json({ error: 'Не удалось сохранить блокировку' }); }
+    if (s.tracks) s.tracks = s.tracks.filter(t => t.id !== trackId);
+    delete failures[key]; saveFailures();
+    console.log(`Автооткрепление трека ${trackId} «${track.title}» у «${s.def.name}»: ${cause}`);
+    res.json({ ok: true, unpinned: true, count: combined(s).length });
   });
   const adminGate = (req, res) => {
     const body = parseBody(req);

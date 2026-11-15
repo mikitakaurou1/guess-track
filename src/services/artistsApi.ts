@@ -98,3 +98,8 @@ export async function fetchArtistPool(id: string): Promise<Track[]> {
 export async function reportTrack(artistId: string, trackId: number, reason: ReportReason): Promise<void> {
   await post('/api/artist-report', { artistId, trackId, reason });
 }
+
+// Трек не загрузился в плеере (отправляется после того, как в той же игре заиграл другой трек). Ошибки не важны.
+export async function reportUnplayable(artistId: string, trackId: number): Promise<void> {
+  try { await post('/api/artist-unplayable', { artistId, trackId }); } catch { /* best effort */ }
+}
