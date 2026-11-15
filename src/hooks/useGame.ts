@@ -31,6 +31,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const [soundBlocked, setSoundBlocked] = useState(false);
   const [preloadDone, setPreloadDone] = useState(true);
   const stateRef = useRef(state); stateRef.current = state;
+  const playlistRef = useRef(playlist); playlistRef.current = playlist;
   const playersRef = useRef(players); playersRef.current = players;
   const preloadRef = useRef<Preload | null>(null);
   const tapStartRef = useRef<{ round: number; trackIndex: number } | null>(null);
@@ -259,7 +260,8 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const loadSourcesRef = useRef(loadSources); loadSourcesRef.current = loadSources;
   useEffect(() => {
     const onChanged = () => {
-      if (stateRef.current.phase !== 'setup' || !lastUrlsRef.current.length) return;
+      // Перезагружаем источники только когда треки уже загружены (шаг 2); на шаге 1 админские правки не должны перебрасывать дальше
+      if (stateRef.current.phase !== 'setup' || !lastUrlsRef.current.length || !playlistRef.current.length) return;
       void loadSourcesRef.current(lastUrlsRef.current);
     };
     window.addEventListener(CATALOG_CHANGED, onChanged);
