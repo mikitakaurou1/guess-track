@@ -200,7 +200,8 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
     const s = stateRef.current; const ps = playersRef.current;
     const remote = (s.config?.owners ?? []).some(o => o !== null);
     const nextRound = s.round + 1; const pre = preloadRef.current;
-    ps?.[s.round % 2].detach();
+    // После последнего трека плеер не останавливаем: на итогах трек доигрывает до конца
+    if (s.order[nextRound] !== undefined) ps?.[s.round % 2].detach();
     if (ps && !remote && pre && pre.ok && pre.round === nextRound && pre.trackIndex === s.order[nextRound]) {
       void ps[nextRound % 2].startPrepared(); tapStartRef.current = { round: nextRound, trackIndex: pre.trackIndex };
     }
@@ -210,12 +211,14 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const nextBusy = TOUCH && !remoteGame && state.phase === 'reveal' && !preloadDone && state.order[state.round + 1] !== undefined;
   useEffect(() => {
     if (!players) return;
+    const from = prevPhase.current; prevPhase.current = state.phase;
+    // Итоги сразу после показа трека: он играет дальше. Остановка при выходе из итогов (возврат в настройки)
+    if (state.phase === 'final' && (from === 'reveal' || from === 'final')) return;
     if (state.phase === 'final' || state.phase === 'setup') { players.forEach(p => p.pause()); return; }
     const p = players[state.round % 2];
     if (state.phase === 'answering') p.pause();
-    if (state.phase === 'playing' && prevPhase.current === 'answering') p.resume();
+    if (state.phase === 'playing' && from === 'answering') p.resume();
     if (state.phase === 'reveal') { if (state.result?.kind === 'nobody' && !state.config?.reverse) p.resume(); else p.playFull(); }
-    prevPhase.current = state.phase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, players]);
   const prevPhase = useRef(state.phase);

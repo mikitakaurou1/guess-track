@@ -8,7 +8,9 @@ export function buildSnapshot(state: GameState, positionMs: number): GuestSnapsh
   const c = state.config;
   const clipLeft = !c || state.phase === 'clipDone' || state.phase === 'reveal' ? 0 : Math.max(0, 1 - positionMs / (c.clipSeconds * 1000));
   const track = selectCurrentTrack(state);
-  const hasAudio = !!track && ['loading', 'playing', 'clipDone', 'answering', 'reveal'].includes(state.phase);
+  // На итогах звук остаётся только если итоги наступили сразу после показа этого трека: он доигрывает до конца
+  const finalAfterReveal = state.phase === 'final' && !!track && state.history[state.history.length - 1]?.track.id === track.id;
+  const hasAudio = !!track && (['loading', 'playing', 'clipDone', 'answering', 'reveal'].includes(state.phase) || finalAfterReveal);
   const src = hasAudio ? c?.reverse ? reverseSrc(track!.url, c.clipSeconds) : trackSrc(track!) : null;
   return {
     phase: state.phase, round: state.round, total: state.order.length,

@@ -60,6 +60,8 @@ export function useGuestAudio(player: SoundCloudPlayer | null, snap: GuestSnapsh
         else tryPlay(() => player.playFromStart());
       } else if (phase === 'loading') {
         if (startedKey.current !== key) { player.pause(); setAudioState('ready'); }
+      } else if (phase === 'final') {
+        // итоги сразу после показа трека: он доигрывает до конца, пауза включится, когда ключ трека пропадёт из снимка
       } else { player.pause(); setAudioState('ready'); }
     });
   }, [player, phase, key, enabled, tryPlay]);
