@@ -3,6 +3,7 @@ import http from 'node:http';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { registerArtistRoutes } from './artists.js';
+import { registerArtistEdits } from './artistEdits.js';
 import { registerFeaturedRoutes, overlayPlaylistInfo } from './featured.js';
 
 const PORT = process.env.PORT ?? 3001;
@@ -190,6 +191,8 @@ app.get('/api/playlist-info', async (req, res) => {
   }
 });
 
+// Правки админа в треках артистов: модуль подключается до маршрутов артистов, чтобы дополнять их ответ: см. server/artistEdits.js
+registerArtistEdits(app);
 // Каталоги артистов (Kai Angel, madk1d и др.): см. server/artists.js
 registerArtistRoutes(app, v2);
 // Правки админа в плейлисте GuessTrack: см. server/featured.js

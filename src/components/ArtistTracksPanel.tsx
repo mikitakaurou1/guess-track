@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Icon from './Icon';
-import { adminDeleteTrack, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
+import { adminDeleteTrack, adminEditArtistTrack, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
 import { API_BASE } from '../config';
+import { imageFileToJpegDataUrl } from '../utils/imageData';
 import type { Track } from '../types/game';
 import '../styles/artists.css';
 
@@ -13,19 +14,6 @@ interface Props {
   onRemoved: (artistId: string) => void;
   onResetCover: (artistId: string) => void;
   onError: (message: string) => void;
-}
-async function imageData(file: File): Promise<string> {
-  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) throw new Error('Подойдут PNG, JPEG, WebP и GIF');
-  if (file.size > 15 * 1024 * 1024) throw new Error('Исходный файл должен быть не больше 15 МБ');
-  const image = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 600 / Math.max(image.width, image.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.width * scale)); canvas.height = Math.max(1, Math.round(image.height * scale));
-    const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Не удалось обработать картинку');
-    ctx.fillStyle = '#07080f'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.9);
-  } finally { image.close(); }
 }
 export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetCover, onError }: Props) {
   const [tracks, setTracks] = useState<ListedTrack[] | null>(null);
@@ -39,13 +27,19 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');
+  const [editId, setEditId] = useState<number | null>(null);
+  const [eTitle, setETitle] = useState('');
+  const [eArtist, setEArtist] = useState('');
+  const [eCover, setECover] = useState('');
+  const [eFile, setEFile] = useState<File | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const currentArtist = useRef(artist.id); currentArtist.current = artist.id;
   const version = useRef(0);
   useEffect(() => {
     let cancelled = false;
     const revision = ++version.current;
-    setTracks(null); setError(''); setSaved(''); setFormOpen(false); setTitle(''); setPerformer(artist.name); setUrl(''); setCoverUrl(''); setFile(null);
+    setTracks(null); setError(''); setSaved(''); setFormOpen(false); setTitle(''); setPerformer(artist.name); setUrl(''); setCoverUrl(''); setFile(null); setEditId(null);
     fetchArtistPool(artist.id)
       .then(list => { if (!cancelled && version.current === revision) setTracks(list); })
       .catch(e => { if (!cancelled && version.current === revision) setError((e as Error).message); });
@@ -63,11 +57,44 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     } catch (e) { onError((e as Error).message); }
     finally { setBusyId(null); }
   };
+  const startEdit = (t: ListedTrack) => {
+    setEditId(t.id); setETitle(t.title); setEArtist(t.artist); setECover(''); setEFile(null); setError('');
+  };
+  const refresh = async (id: string) => {
+    const fresh = await fetchArtistPool(id);
+    if (currentArtist.current === id) { version.current++; setTracks(fresh); setEditId(null); }
+  };
+  const saveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    const t = tracks?.find(x => x.id === editId);
+    if (!t || editBusy) return;
+    const id = artist.id; setEditBusy(true); setError('');
+    try {
+      const patch: { title?: string; artist?: string; artwork?: string } = {};
+      if (eTitle.trim() !== t.title) patch.title = eTitle.trim();
+      if (eArtist.trim() !== t.artist) patch.artist = eArtist.trim();
+      if (eFile) patch.artwork = await imageFileToJpegDataUrl(eFile);
+      else if (eCover.trim()) patch.artwork = eCover.trim();
+      if (!Object.keys(patch).length) throw new Error('Нет изменений');
+      await adminEditArtistTrack(id, t.id, patch);
+      await refresh(id);
+    } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
+    finally { setEditBusy(false); }
+  };
+  const resetEdit = async (trackId: number) => {
+    if (!confirm('Вернуть название, исполнителя и обложку из SoundCloud?')) return;
+    const id = artist.id; setEditBusy(true); setError('');
+    try {
+      await adminEditArtistTrack(id, trackId, { title: null, artist: null, artwork: null });
+      await refresh(id);
+    } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
+    finally { setEditBusy(false); }
+  };
   const add = async (e: FormEvent) => {
     e.preventDefault(); if (saving) return;
     const id = artist.id; setSaving(true); setError(''); setSaved('');
     try {
-      const artwork = file ? await imageData(file) : coverUrl.trim();
+      const artwork = file ? await imageFileToJpegDataUrl(file) : coverUrl.trim();
       const response = await fetch(`${API_BASE}/api/artist-track-add`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ password: localStorage.getItem('guesstrackAdminKey') ?? '', artistId: id, title: title.trim(), artist: performer.trim(), url: url.trim(), artwork }) });
       const data = await response.json().catch(() => ({})) as { error?: string; track?: ListedTrack; count?: number };
       if (!response.ok) throw new Error(data.error ?? `Ошибка сервера (${response.status})`);
@@ -81,6 +108,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
     finally { setSaving(false); }
   };
+  const locked = busyId !== null || saving || editBusy;
   return <div className='tracks-panel'>
     <div className='tracks-head'>
       <b>{artist.name}</b><span className='muted small'>{tracks ? `${tracks.length} треков` : ''}</span>
@@ -104,12 +132,29 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     {error && <div role='alert' className='error'>{error}</div>}
     {!sorted && !error && <div className='muted small'>Загружаем список...</div>}
     {sorted && <ol className='tracks-list' aria-label={`Треки ${artist.name}`}>
-      {sorted.map(t => <li key={t.id}>
-        <div className='tracks-tx'>
-          <a href={t.url} target='_blank' rel='noreferrer'>{t.title}</a>
-          <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}</div>
+      {sorted.map(t => <li key={t.id} className='feat-item'>
+        <div className='feat-row'>
+          {t.artwork ? <img className='feat-thumb' src={t.artwork} alt='' referrerPolicy='no-referrer' /> : <div className='feat-thumb' />}
+          <div className='tracks-tx'>
+            <a href={t.url} target='_blank' rel='noreferrer'>{t.title}</a>
+            <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}</div>
+          </div>
+          <div className='feat-actions'>
+            <button className='btn btn-ghost' disabled={locked} onClick={() => startEdit(t)}>Править</button>
+            <button className='btn btn-ghost' aria-label={`Удалить ${t.title}`} disabled={locked} onClick={() => remove(t)}><Icon name='x' size={16} /></button>
+          </div>
         </div>
-        <button className='btn btn-ghost' aria-label={`Удалить ${t.title}`} disabled={busyId !== null || saving} onClick={() => remove(t)}><Icon name='x' size={16} /></button>
+        {editId === t.id && <form className='feat-form' onSubmit={saveEdit}>
+          <label>Название<input className='input' required maxLength={300} value={eTitle} disabled={editBusy} onChange={e => setETitle(e.target.value)} /></label>
+          <label>Исполнитель<input className='input' required maxLength={300} value={eArtist} disabled={editBusy} onChange={e => setEArtist(e.target.value)} /></label>
+          <label>Ссылка на обложку (необязательно)<input className='input' type='url' placeholder='https://…' value={eCover} disabled={editBusy || !!eFile} onChange={e => setECover(e.target.value)} /></label>
+          <label>Или файл обложки<input className='input' type='file' accept='image/png,image/jpeg,image/webp,image/gif' disabled={editBusy} onChange={e => setEFile(e.target.files?.[0] ?? null)} /></label>
+          <div className='feat-actions'>
+            <button className='btn btn-primary' type='submit' disabled={editBusy}>{editBusy ? 'Сохраняем…' : 'Сохранить'}</button>
+            <button className='btn btn-ghost' type='button' disabled={editBusy} onClick={() => resetEdit(t.id)}>Сбросить правки</button>
+            <button className='btn btn-ghost' type='button' disabled={editBusy} onClick={() => setEditId(null)}>Отмена</button>
+          </div>
+        </form>}
       </li>)}
     </ol>}
   </div>;

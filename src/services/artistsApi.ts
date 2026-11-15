@@ -44,6 +44,10 @@ export async function adminDeleteTrack(artistId: string, trackId: number): Promi
   await post('/api/artist-track-delete', { password: adminPassword(), artistId, trackId });
 }
 
+export async function adminEditArtistTrack(artistId: string, trackId: number, patch: { title?: string | null; artist?: string | null; artwork?: string | null }): Promise<void> {
+  await post('/api/artist-track-edit', { password: adminPassword(), artistId, trackId, ...patch });
+}
+
 export async function adminResetCover(artistId: string): Promise<void> {
   await post('/api/artist-cover-reset', { password: adminPassword(), artistId });
 }
@@ -93,7 +97,7 @@ export async function fetchArtistPool(id: string): Promise<Track[]> {
     const body = await r.json().catch(() => ({}));
     throw new Error(body.error ?? `Ошибка сервера (${r.status})`);
   }
-  const list = (await r.json()) as Track[];
+  const list = ((await r.json()) as Track[]).map(t => (t.artwork?.startsWith('/api/') ? { ...t, artwork: `${API_BASE}${t.artwork}` } : t));
   list.forEach(t => trackArtist.set(t.id, id));
   return list;
 }
