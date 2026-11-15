@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
+import { readyClip } from '../utils/clipCache';
 import '../styles/clip.css';
 
 interface Props {
@@ -15,6 +16,7 @@ export default function ClipBackdrop({ src, sound, onState, children }: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [off, setOff] = useState(false);
+  const url = useMemo(() => readyClip(src) ?? src, [src]);
   const stateRef = useRef(onState);
   stateRef.current = onState;
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function ClipBackdrop({ src, sound, onState, children }: Props) {
   return createPortal(
     <div className={`clip-overlay${playing ? ' on' : ''}`} role='dialog' aria-label='Клип трека' aria-hidden={!playing}>
       <div className='clip-video'>
-        <video ref={video} src={src} loop muted playsInline preload='auto' aria-hidden onError={() => { console.warn('Клип: ошибка загрузки видео', src); setOff(true); }} />
+        <video ref={video} src={url} loop muted playsInline preload='auto' aria-hidden onError={() => { console.warn('Клип: ошибка загрузки видео', src); setOff(true); }} />
       </div>
       <div className='clip-shade' />
       <div className='clip-stage'>{playing && children}</div>

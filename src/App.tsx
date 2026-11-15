@@ -13,6 +13,7 @@ import { useHostRoom } from './hooks/useRoom';
 import { buildSnapshot } from './game/snapshot';
 import { createReversePlayer } from './services/ReversePlayer';
 import { openAdminLogin } from './services/adminLogin';
+import { preloadClip } from './utils/clipCache';
 import type { GameConfig } from './types/game';
 const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
 export default function App() {
@@ -29,6 +30,11 @@ export default function App() {
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const [songless, setSongless] = useState<GameConfig | null>(null);
   const { state } = game;
+  useEffect(() => {
+    if (state.phase === 'setup' || state.phase === 'final') return;
+    preloadClip(state.tracks[state.order[state.round]]?.clip);
+    preloadClip(state.tracks[state.order[state.round + 1]]?.clip);
+  }, [state.phase, state.round, state.order, state.tracks]);
   const rsSeed = state.config?.randomStart ? (state.config.startSeed ?? 0) : null;
   const rsClip = state.config?.clipSeconds ?? 10;
   useLayoutEffect(() => { const m = rsSeed === null ? undefined : { seed: rsSeed, clipMs: rsClip * 1000 }; players?.forEach(p => p.setStartMode(m)); }, [players, rsSeed, rsClip]);
