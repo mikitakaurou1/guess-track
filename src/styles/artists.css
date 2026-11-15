@@ -10,13 +10,14 @@
 @supports not selector(::-webkit-scrollbar) {
   .artists-row, .tracks-list { scrollbar-width: thin; scrollbar-color: var(--v) rgba(255,255,255,.06); }
 }
-.artist-card { flex: 0 0 168px; scroll-snap-align: start; display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
+.artist-card { flex: 0 0 168px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--glass-b); border-radius: 18px; background: rgba(255,255,255,.05); }
+.artist-card > .artist-count + .btn { margin-top: auto; }
 .artist-card.admin { cursor: grab; user-select: none; -webkit-user-select: none; }
 .artist-card.admin .btn { cursor: pointer; }
 .artist-card.dragging { opacity: .25; outline: 2px dashed var(--c); outline-offset: 2px; }
 .artist-ghost { position: fixed; z-index: 1000; margin: 0; pointer-events: none; opacity: .96; transform: scale(1.05) rotate(2deg); box-shadow: 0 18px 50px rgba(0,0,0,.55), 0 0 30px rgba(139,92,246,.5); backdrop-filter: blur(10px); background: rgba(20,22,40,.9); }
 body.artist-dragging, body.artist-dragging * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
-.artist-art { width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover; }
+.artist-art { flex: none; width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover; }
 .artist-art-ph { display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--mut); }
 .artist-name { font-weight: 800; overflow-wrap: anywhere; }
 .artist-count { color: var(--mut); font-size: 13px; }
