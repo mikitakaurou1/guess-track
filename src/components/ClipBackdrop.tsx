@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import { loadYouTubeApi } from '../services/youtube';
@@ -6,18 +7,21 @@ import '../styles/clip.css';
 
 interface Props {
   videoId: string;
-  title: string;
-  artist: string;
   sound?: boolean; // пробуем со звуком; если браузер не разрешил, играем без звука
-  isLast?: boolean;
-  nextBusy?: boolean;
-  onNext?: () => void;
+  onState?: (on: boolean) => void; // true, когда клип играет и карточка показана внутри клипа
+  children: ReactNode;
 }
 
-export default function ClipBackdrop({ videoId, title, artist, sound, isLast, nextBusy, onNext }: Props) {
+export default function ClipBackdrop({ videoId, sound, onState, children }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [off, setOff] = useState(false);
+  const stateRef = useRef(onState);
+  stateRef.current = onState;
+  useEffect(() => {
+    stateRef.current?.(playing && !off);
+    return () => stateRef.current?.(false);
+  }, [playing, off]);
   useEffect(() => {
     let dead = false;
     let started = false;
@@ -41,11 +45,11 @@ export default function ClipBackdrop({ videoId, title, artist, sound, isLast, ne
           onStateChange: (e) => {
             if (e.data === 1) { started = true; clearTimeout(failTimer); clearTimeout(soundTimer); setPlaying(true); }
           },
-          onError: fail,
+          onError: (e) => { console.warn('YouTube: ошибка плеера, код', e.data); fail(); },
         },
       });
-      failTimer = setTimeout(() => { if (!started) fail(); }, 9000);
-    }).catch(fail);
+      failTimer = setTimeout(() => { if (!started) { console.warn('YouTube: клип не запустился за 9 секунд'); fail(); } }, 9000);
+    }).catch((e) => { console.warn('YouTube:', (e as Error).message); fail(); });
     return () => {
       dead = true;
       clearTimeout(failTimer);
@@ -58,17 +62,8 @@ export default function ClipBackdrop({ videoId, title, artist, sound, isLast, ne
     <div className={`clip-overlay${playing ? ' on' : ''}`} role='dialog' aria-label='Клип трека' aria-hidden={!playing}>
       <div className='clip-video' ref={host} aria-hidden />
       <div className='clip-shade' />
+      <div className='clip-stage'>{playing && children}</div>
       <button className='clip-close' aria-label='Закрыть клип' onClick={() => setOff(true)}><Icon name='x' size={20} /></button>
-      <div className='clip-content'>
-        <div className='clip-title'>{title || 'Название недоступно'}</div>
-        {artist && <div className='clip-artist'>{artist}</div>}
-        {onNext && (
-          <button className='btn btn-primary clip-next' onClick={onNext} disabled={nextBusy}>
-            {nextBusy ? 'Загружаем следующий трек…' : isLast ? 'К итогам' : 'Дальше'}
-            {!nextBusy && <Icon name='arrow-right' size={16} />}
-          </button>
-        )}
-      </div>
       <a className='clip-yt' href={`https://www.youtube.com/watch?v=${videoId}`} target='_blank' rel='noreferrer'>Смотреть на YouTube</a>
     </div>,
     document.body,

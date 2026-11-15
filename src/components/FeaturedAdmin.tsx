@@ -5,6 +5,7 @@ import type { PlaylistTrack } from '../services/playlistInfo';
 import { BAD_PASSWORD, clearAdminKey } from '../services/artistsApi';
 import { featuredEdit, featuredRemove, featuredRestore, fetchFeaturedOverrides, type RemovedTrack } from '../services/featuredApi';
 import { imageFileToJpegDataUrl } from '../utils/imageData';
+import { notifyCatalogChanged } from '../utils/catalogEvents';
 import '../styles/artists.css';
 
 interface Props { tracks: PlaylistTrack[]; onChanged: () => Promise<void>; }
@@ -35,6 +36,7 @@ export default function FeaturedAdmin({ tracks, onChanged }: Props) {
       await job();
       await onChanged();
       await refreshRemoved();
+      notifyCatalogChanged();
     } catch (e) {
       const m = (e as Error).message;
       setError(m);

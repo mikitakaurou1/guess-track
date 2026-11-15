@@ -4,6 +4,7 @@ import Icon from './Icon';
 import { adminDeleteTrack, adminEditArtistTrack, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
 import { API_BASE } from '../config';
 import { imageFileToJpegDataUrl } from '../utils/imageData';
+import { notifyCatalogChanged } from '../utils/catalogEvents';
 import type { Track } from '../types/game';
 import '../styles/artists.css';
 
@@ -56,6 +57,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
       await adminDeleteTrack(id, t.id);
       if (currentArtist.current === id) { version.current++; setTracks(list => list ? list.filter(x => x.id !== t.id) : list); }
       onRemoved(id);
+      notifyCatalogChanged();
     } catch (e) { onError((e as Error).message); }
     finally { setBusyId(null); }
   };
@@ -65,6 +67,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const refresh = async (id: string) => {
     const fresh = await fetchArtistPool(id);
     if (currentArtist.current === id) { version.current++; setTracks(fresh); setEditId(null); }
+    notifyCatalogChanged();
   };
   const saveEdit = async (e: FormEvent) => {
     e.preventDefault();
@@ -109,6 +112,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
         setTitle(''); setUrl(''); setCoverUrl(''); setFile(null); if (fileRef.current) fileRef.current.value = '';
         setSaved('Трек сохранён. Он доступен в каталоге этого артиста.');
       }
+      notifyCatalogChanged();
     } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
     finally { setSaving(false); }
   };

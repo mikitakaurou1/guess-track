@@ -37,6 +37,7 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
   const [history, setHistory] = useState<RoundRecord[]>([]);
   const [score, setScore] = useState(0);
   const [resolved, setResolved] = useState<Track | null>(null);
+  const [clipOn, setClipOn] = useState(false);
   const cache = useRef(new Map<number, Track>());
   const submitted = useRef(false);
   const track = session.tracks[round];
@@ -106,6 +107,14 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
   };
   const goNext = () => { setAudioUrl(''); if (round + 1 === session.tracks.length) setPhase('final'); else setRound(r => r + 1); };
   if (phase === 'final') return <><FinalScreen names={config.playerNames} avatars={config.avatars} scores={[score]} history={history} onRestart={onExit}/><button className='btn btn-ghost' onClick={onExit}>К режимам</button></>;
+  const revealEl = phase === 'reveal' && currentTrack ? <>
+    <div className='reverse-card'>
+      {currentTrack.artwork ? <img className='reverse-cover' src={currentTrack.artwork.replace('-large', '-t300x300')} alt=''/> : <div className='reverse-cover reverse-cover-empty'><Icon name='disc' size={48}/></div>}
+      <div className='reverse-track-info'><div className='reverse-track-title'>{currentTrack.title}</div><div className='muted'>{currentTrack.artist}</div></div>
+      <div className='reverse-points'><b className='grad'>{history[history.length - 1]?.result.kind === 'correct' ? '+1' : '0'}</b><span>баллов</span></div>
+    </div>
+    <button className='btn btn-primary btn-lg' onClick={goNext}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button>
+  </> : null;
   return <section className='glass reverse-game'>
     <div className='row between'><h2>Перевертыш</h2><span>Трек {round + 1} / {session.tracks.length} · {score} очков</span></div>
     {phase === 'loading' && <p className='muted'>Получаем ссылку SoundCloud, загружаем и переворачиваем отрывок… Это может занять несколько минут.</p>}
@@ -113,12 +122,10 @@ export default function ReverseGame({ playlist, player, config, onExit }: { play
     {notice && <p className='muted small'>{notice}</p>}
     {audioUrl && (phase === 'ready' || phase === 'reveal') && <ReverseAudio key={audioUrl} src={audioUrl} paused={phase !== 'ready'} onError={() => { setError('Не удалось воспроизвести подготовленный отрывок.'); setPhase('error'); }}/>}
     {phase === 'ready' && <><p className='muted'>Обратный отрывок · до {session.seconds} с</p><form className='answer-form' onSubmit={e => { e.preventDefault(); finish(false); }}><input className='input' aria-label='Название трека' placeholder='Название трека' value={text} onChange={e => setText(e.target.value)}/><button className='btn btn-primary' disabled={!text.trim()}>Ответить</button></form><div className='row'><button className='btn btn-ghost' onClick={() => finish(true)}>Пропустить</button><button className='btn btn-ghost' onClick={replace}>Нет звука — заменить</button></div></>}
-    {phase === 'reveal' && currentTrack && <><div className='reverse-card'>
-      {currentTrack.artwork ? <img className='reverse-cover' src={currentTrack.artwork.replace('-large', '-t300x300')} alt=''/> : <div className='reverse-cover reverse-cover-empty'><Icon name='disc' size={48}/></div>}
-      <div className='reverse-track-info'><div className='reverse-track-title'>{currentTrack.title}</div><div className='muted'>{currentTrack.artist}</div></div>
-      <div className='reverse-points'><b className='grad'>{history[history.length - 1]?.result.kind === 'correct' ? '+1' : '0'}</b><span>баллов</span></div>
-    </div><button className='btn btn-primary btn-lg' onClick={goNext}>{round + 1 === session.tracks.length ? 'Итоги' : 'Следующий трек'}</button>
-    {currentTrack.clip && <ClipBackdrop key={currentTrack.clip} sound videoId={currentTrack.clip} title={currentTrack.title} artist={currentTrack.artist} isLast={round + 1 === session.tracks.length} onNext={goNext}/>}</>}
+    {revealEl && <>
+      {!clipOn && revealEl}
+      {currentTrack?.clip && <ClipBackdrop key={currentTrack.clip} sound videoId={currentTrack.clip} onState={setClipOn}>{revealEl}</ClipBackdrop>}
+    </>}
     <button className='btn btn-ghost' onClick={onExit}>Выйти в настройки</button>
   </section>;
 }

@@ -5,6 +5,7 @@ import { fetchLikes, resolveShortUrl } from '../services/likesApi';
 import { ARTIST_PREFIX, artistLabel, artistOfTrack, fetchArtistPool, reportUnplayable } from '../services/artistsApi';
 import { parseSoundCloudUrl } from '../services/soundcloudUrl';
 import { DEFAULT_RTT_MS, RttTracker, arbitrationWaitMs, pickWinner, reactionFromGuest, windowKey, type BuzzCandidate } from '../game/buzz';
+import { CATALOG_CHANGED } from '../utils/catalogEvents';
 import type { GameConfig, Track } from '../types/game';
 const GUEST_WAIT_MS = 4000;
 const START_TIMEOUT_MS = 6000;
@@ -35,6 +36,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const tapStartRef = useRef<{ round: number; trackIndex: number } | null>(null);
   const readyRef = useRef(new Map<string, Set<string>>());
   const pendingFailsRef = useRef(new Set<number>());
+  const lastUrlsRef = useRef<string[]>([]);
   const flushFailures = useCallback(() => {
     const ids = [...pendingFailsRef.current]; pendingFailsRef.current.clear();
     for (const id of ids) { const artistId = artistOfTrack(id); if (artistId) void reportUnplayable(artistId, id); }
@@ -220,6 +222,7 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
   const loadSources = useCallback(async (urls: string[]) => {
     if (!first) return;
     const clean = urls.map(u => u.trim()).filter(Boolean); setLoadError(null); setIsLoadingPlaylist(true);
+    if (clean.length) lastUrlsRef.current = clean;
     try {
       if (!clean.length) throw new Error('Вставьте хотя бы одну ссылку.');
       const lists: Track[][] = []; const resolved: string[] = [];
@@ -250,6 +253,15 @@ export function useGame(players: SoundCloudPlayer[] | null, net?: GameNet) {
       setPlaylist(merged); setSources(stats);
     } catch (e) { setLoadError((e as Error).message); } finally { setIsLoadingPlaylist(false); }
   }, [first]);
+  const loadSourcesRef = useRef(loadSources); loadSourcesRef.current = loadSources;
+  useEffect(() => {
+    const onChanged = () => {
+      if (stateRef.current.phase !== 'setup' || !lastUrlsRef.current.length) return;
+      void loadSourcesRef.current(lastUrlsRef.current);
+    };
+    window.addEventListener(CATALOG_CHANGED, onChanged);
+    return () => window.removeEventListener(CATALOG_CHANGED, onChanged);
+  }, []);
   const startGame = useCallback((config: GameConfig) => {
     readyRef.current.clear(); preloadRef.current = null; tapStartRef.current = null; pendingFailsRef.current.clear(); setPreloadDone(true);
     dispatch({ type: 'START', config, tracks: playlist });
