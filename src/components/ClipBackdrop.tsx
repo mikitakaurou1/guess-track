@@ -25,8 +25,8 @@ export default function ClipBackdrop({ videoId, sound, onState, children }: Prop
   useEffect(() => {
     let dead = false;
     let started = false;
-    let failTimer: ReturnType<typeof setTimeout> | undefined;
-    let soundTimer: ReturnType<typeof setTimeout> | undefined;
+    let ready = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
     let player: { destroy(): void } | null = null;
     const fail = () => { if (!dead) setOff(true); };
     loadYouTubeApi().then((YT) => {
@@ -35,25 +35,31 @@ export default function ClipBackdrop({ videoId, sound, onState, children }: Prop
       host.current.appendChild(mount);
       player = new YT.Player(mount, {
         videoId,
-        playerVars: { autoplay: 1, mute: sound ? 0 : 1, controls: 0, disablekb: 1, fs: 0, rel: 0, playsinline: 1, loop: 1, playlist: videoId, modestbranding: 1, iv_load_policy: 3 },
+        playerVars: { autoplay: 1, mute: sound ? 0 : 1, controls: 0, disablekb: 1, fs: 0, rel: 0, playsinline: 1, loop: 1, playlist: videoId, modestbranding: 1, iv_load_policy: 3, enablejsapi: 1, origin: window.location.origin },
         events: {
           onReady: (e) => {
+            ready = true;
+            console.info('YouTube: плеер готов');
             if (!sound) e.target.mute();
             e.target.playVideo();
-            if (sound) soundTimer = setTimeout(() => { if (!started) { e.target.mute(); e.target.playVideo(); } }, 2500);
+            [2500, 5000].forEach((ms) => timers.push(setTimeout(() => { if (!started && !dead) { e.target.mute(); e.target.playVideo(); } }, ms)));
           },
           onStateChange: (e) => {
-            if (e.data === 1) { started = true; clearTimeout(failTimer); clearTimeout(soundTimer); setPlaying(true); }
+            console.info('YouTube: состояние плеера', e.data);
+            if (e.data === 1) { started = true; timers.forEach(clearTimeout); setPlaying(true); }
           },
           onError: (e) => { console.warn('YouTube: ошибка плеера, код', e.data); fail(); },
         },
       });
-      failTimer = setTimeout(() => { if (!started) { console.warn('YouTube: клип не запустился за 9 секунд'); fail(); } }, 9000);
+      timers.push(setTimeout(() => {
+        if (started) return;
+        console.warn(ready ? 'YouTube: плеер готов, но видео не стартовало за 12 секунд' : 'YouTube: плеер не ответил за 12 секунд (iframe не загрузился или заблокирован)');
+        fail();
+      }, 12000));
     }).catch((e) => { console.warn('YouTube:', (e as Error).message); fail(); });
     return () => {
       dead = true;
-      clearTimeout(failTimer);
-      clearTimeout(soundTimer);
+      timers.forEach(clearTimeout);
       try { player?.destroy(); } catch { /* уже удалён */ }
     };
   }, [videoId, sound]);

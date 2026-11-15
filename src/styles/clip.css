@@ -1,5 +1,6 @@
-.clip-overlay { position: fixed; inset: 0; z-index: 900; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s ease; }
-.clip-overlay.on { opacity: 1; pointer-events: auto; }
+.clip-overlay { position: fixed; inset: 0; z-index: -1; background: #000; pointer-events: none; }
+.clip-overlay.on { z-index: 900; pointer-events: auto; animation: clip-in .45s ease; }
+@keyframes clip-in { from { opacity: 0; } to { opacity: 1; } }
 .clip-video { position: absolute; inset: 0; overflow: hidden; filter: grayscale(1) brightness(.5) contrast(1.05); pointer-events: none; }
 .clip-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%); border: 0; }
 .clip-shade { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,.1), rgba(0,0,0,.5)); }
