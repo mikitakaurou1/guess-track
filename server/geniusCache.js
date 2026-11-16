@@ -1,5 +1,6 @@
 // Постоянный кэш запросов к Genius. Списки песен артистов качаются один раз и хранятся в папке данных
 // (genius-cache.json), которую persist.js синхронизирует с Supabase: перезапуски и деплои не заставляют заново ходить в Genius.
+// Также кэш можно наполнить локально скриптом scripts/genius-warm.mjs.
 // Подключается динамически в index.js после восстановления файлов и до загрузки каталогов артистов.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,8 +10,9 @@ const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirna
 const FILE = path.join(DATA_DIR, 'genius-cache.json');
 const VERSION = String(process.env.GENIUS_CACHE_VERSION ?? '1');
 const SEARCH_TTL_MS = 24 * 3600_000;
-const MIN_GAP_MS = 300;
+const MIN_GAP_MS = 1200;
 const MAX_ATTEMPTS = 8;
+const MAX_WAIT_MS = 5 * 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 
 const realFetch = globalThis.fetch.bind(globalThis);
@@ -76,12 +78,13 @@ function schedule(task) {
 function cached(key, isSearch) {
   const hit = items[key];
   if (!hit) return null;
-  if (isSearch && Date.now() - hit.at > SEARCH_TTL_MS) return null;
+  if (isSearch && !hit.keep && Date.now() - hit.at > SEARCH_TTL_MS) return null;
   return hit.data;
 }
 
-async function fromNetwork(url, init, key, u, isSearch) {
+async function fromNetwork(url, init, key, u) {
   const { signal: _ignored, ...rest } = init ?? {};
+  const isSongs = /\/songs$/.test(u.pathname);
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let r;
     try {
@@ -99,9 +102,11 @@ async function fromNetwork(url, init, key, u, isSearch) {
       save();
       return asResponse(slim);
     }
-    if ((r.status === 429 || r.status >= 500) && attempt < MAX_ATTEMPTS) {
+    // 429, ошибки сервера и 404 на списке песен (Genius иногда отвечает так при лимите) — временные
+    const limited = r.status === 429 || r.status >= 500 || (r.status === 404 && isSongs);
+    if (limited && attempt < MAX_ATTEMPTS) {
       const retryAfter = Number(r.headers.get('retry-after'));
-      const wait = retryAfter > 0 ? Math.min(retryAfter * 1000, 60_000) : Math.min(60_000, 2000 * 2 ** (attempt - 1));
+      const wait = retryAfter > 0 ? Math.min(retryAfter * 1000, MAX_WAIT_MS) : Math.min(120_000, 5000 * 2 ** (attempt - 1));
       console.warn(`Genius ответил ${r.status}, повтор через ${Math.round(wait / 1000)} с (попытка ${attempt}/${MAX_ATTEMPTS})`);
       await sleep(wait);
       continue;
@@ -124,6 +129,6 @@ globalThis.fetch = function patchedFetch(input, init) {
   return schedule(async () => {
     const again = cached(key, isSearch);
     if (again) return asResponse(again);
-    return fromNetwork(url, init, key, u, isSearch);
+    return fromNetwork(url, init, key, u);
   });
 };
