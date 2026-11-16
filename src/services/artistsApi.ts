@@ -103,7 +103,13 @@ export async function fetchArtistPool(id: string): Promise<Track[]> {
     const body = await r.json().catch(() => ({}));
     throw new Error(body.error ?? `Ошибка сервера (${r.status})`);
   }
-  const list = ((await r.json()) as Track[]).map(t => (t.artwork?.startsWith('/api/') ? { ...t, artwork: `${API_BASE}${t.artwork}` } : t));
+  const list = ((await r.json()) as Track[]).map(t => ({
+    ...t,
+    ...(t.artwork?.startsWith('/api/') ? { artwork: `${API_BASE}${t.artwork}` } : {}),
+    // Каталог уже содержит исполнителя с учётом ручного добавления и правок админа.
+    // Виджет возвращает username загрузившего: не даём ему перезаписать это поле.
+    edited: { ...t.edited, artist: true },
+  }));
   list.forEach(t => trackArtist.set(t.id, id));
   return list;
 }
