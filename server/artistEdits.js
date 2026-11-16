@@ -13,53 +13,40 @@ const COVERS_DIR = process.env.ARTIST_TRACK_COVERS_DIR ?? path.join(DATA_DIR, 'a
 const EXT = { png: 'png', jpeg: 'jpg', webp: 'webp', gif: 'gif' };
 const MIME = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 const MAX_FAILED_PER_HOUR = 10;
-const ARTIST_IDS = new Set(ARTISTS.map((a) => a.id));
+const ARTIST_IDS = new Set(ARTISTS.map(a => a.id));
 const NOT_A_TRACK = new Set(['sets', 'likes', 'tracks', 'albums', 'reposts', 'popular-tracks', 'following', 'followers']);
-
-// Ссылка на один трек SoundCloud: soundcloud.com/исполнитель/название (не профиль и не плейлист)
+const RETIRED_ROUTES = new Set(['/api/artist-unplayable', '/api/artist-track-region', '/api/artist-repost-candidates']);
 function trackLink(raw) {
   const url = validateTrackUrl(raw);
   const parts = new URL(url).pathname.split('/').filter(Boolean);
   if (parts.length !== 2 || NOT_A_TRACK.has(parts[1].toLowerCase())) throw new Error('Нужна ссылка именно на трек: soundcloud.com/исполнитель/название-трека');
   return url;
 }
-
 let edits = {};
 try {
   const parsed = JSON.parse(fs.readFileSync(FILE, 'utf8'));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid artist track edits file');
   edits = parsed;
-} catch (e) {
-  if (e.code !== 'ENOENT') throw e;
-}
-
+} catch (e) { if (e.code !== 'ENOENT') throw e; }
 function save(next) {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   const tmp = `${FILE}.tmp`;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
-    fs.renameSync(tmp, FILE);
-  } catch (e) {
-    try { fs.unlinkSync(tmp); } catch { /* no temp */ }
-    throw e;
-  }
+  try { fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 }); fs.renameSync(tmp, FILE); }
+  catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
   edits = next;
 }
-
 const coverPath = (artistId, id, ext) => path.join(COVERS_DIR, `${artistId}__${id}.${ext}`);
 function removeCoverFiles(artistId, id, except) {
   for (const ext of Object.values(EXT)) {
     if (ext === except) continue;
-    try { fs.unlinkSync(coverPath(artistId, id, ext)); } catch { /* no file */ }
+    try { fs.unlinkSync(coverPath(artistId, id, ext)); } catch {}
   }
 }
-
-const artUrl = (artistId, id, e) => (e.artworkFile ? `/api/artist-track-cover?artist=${encodeURIComponent(artistId)}&id=${id}&v=${e.artworkFile.v}` : e.artwork);
-
+const artUrl = (artistId, id, e) => e.artworkFile ? `/api/artist-track-cover?artist=${encodeURIComponent(artistId)}&id=${id}&v=${e.artworkFile.v}` : e.artwork;
 function overlayPool(artistId, list) {
   const per = edits[artistId];
   if (!per) return list;
-  return list.map((t) => {
+  return list.map(t => {
     const e = per[t.id];
     if (!e) return t;
     const out = { ...t };
@@ -69,59 +56,54 @@ function overlayPool(artistId, list) {
     const art = artUrl(artistId, t.id, e);
     if (art) { out.artwork = art; edited.artwork = true; }
     if (isClipPath(e.clip)) out.clip = clipUrl(e.clip);
-    // Админ поменял ссылку: звук берётся оттуда, а название, исполнитель и обложка остаются как были (игра не подменяет их данными другого трека)
     if (e.url) { out.url = e.url; out.src = e.url; edited.title = true; edited.artist = true; edited.artwork = true; }
     const hasEdited = Object.keys(edited).length > 0;
     return hasEdited || out.clip ? { ...out, ...(hasEdited ? { edited } : {}) } : t;
   });
 }
-
 const failed = new Map();
-const recentFails = (ip) => (failed.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
-const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
-
+const recentFails = ip => (failed.get(ip) ?? []).filter(t => Date.now() - t < 3600_000);
+const sha = s => crypto.createHash('sha256').update(String(s)).digest();
 export function registerArtistEdits(app) {
+  // Registered before artist routes: stale browser tabs cannot unpin or replace tracks automatically.
+  app.use((req, res, next) => {
+    const route = req.path.toLowerCase().replace(/\/+$/, '');
+    if (RETIRED_ROUTES.has(route)) return res.status(410).json({ error: 'Автоматическое открепление и региональные проверки отключены. Обновите страницу.', disabled: true });
+    next();
+  });
   const bigTextBody = express.text({ type: () => true, limit: '3mb' });
   const gate = (req, res) => {
     let body = null;
-    try { const b = JSON.parse(req.body); body = b && typeof b === 'object' ? b : null; } catch { /* bad json */ }
+    try { const b = JSON.parse(req.body); body = b && typeof b === 'object' ? b : null; } catch {}
     if (!body) { res.status(400).json({ error: 'Некорректный запрос' }); return null; }
     if (recentFails(req.ip).length >= MAX_FAILED_PER_HOUR) { res.status(429).json({ error: 'Слишком много попыток, попробуйте позже' }); return null; }
     const expected = process.env.ADMIN_PASSWORD;
     if (!expected) { res.status(503).json({ error: 'Пароль администратора не задан на сервере (ADMIN_PASSWORD)' }); return null; }
     if (!crypto.timingSafeEqual(sha(body.password ?? ''), sha(expected))) {
       failed.set(req.ip, [...recentFails(req.ip), Date.now()]);
-      res.status(403).json({ error: 'Неверный пароль' });
-      return null;
+      res.status(403).json({ error: 'Неверный пароль' }); return null;
     }
     return body;
   };
-
   app.use('/api/artist-pool', (req, res, next) => {
     const json = res.json.bind(res);
-    res.json = (body) => json(Array.isArray(body) ? overlayPool(String(req.query.id ?? ''), body) : body);
+    res.json = body => json(Array.isArray(body) ? overlayPool(String(req.query.id ?? ''), body) : body);
     next();
   });
-
   app.get('/api/artist-track-cover', (req, res) => {
-    const artistId = String(req.query.artist ?? '');
-    const id = String(req.query.id ?? '');
+    const artistId = String(req.query.artist ?? ''); const id = String(req.query.id ?? '');
     const file = edits[artistId]?.[id]?.artworkFile;
     if (!ARTIST_IDS.has(artistId) || !file || !MIME[file.ext]) return res.status(404).end();
     fs.readFile(coverPath(artistId, id, file.ext), (err, buf) => {
       if (err) return res.status(404).end();
-      res.setHeader('Content-Type', MIME[file.ext]);
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Content-Type', MIME[file.ext]); res.setHeader('Cache-Control', 'public, max-age=3600');
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-      res.end(buf);
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox"); res.end(buf);
     });
   });
-
   app.post('/api/artist-track-edit', bigTextBody, (req, res) => {
     const body = gate(req, res); if (!body) return;
-    const artistId = String(body.artistId ?? '');
-    const id = Number(body.trackId);
+    const artistId = String(body.artistId ?? ''); const id = Number(body.trackId);
     if (!ARTIST_IDS.has(artistId) || !Number.isSafeInteger(id) || id === 0) return res.status(400).json({ error: 'Некорректный трек' });
     const next = { ...(edits[artistId]?.[id] ?? {}) };
     for (const f of ['title', 'artist']) {
@@ -133,20 +115,13 @@ export function registerArtistEdits(app) {
     }
     if ('url' in body) {
       if (body.url === null) delete next.url;
-      else {
-        try { next.url = trackLink(body.url); }
-        catch (e) { return res.status(400).json({ error: e.message }); }
-      }
+      else { try { next.url = trackLink(body.url); } catch (e) { return res.status(400).json({ error: e.message }); } }
     }
     let oldClip = null;
     if ('clip' in body) {
       oldClip = isClipPath(next.clip) ? next.clip : null;
       if (body.clip === null) delete next.clip;
-      else {
-        const clip = clipPathOf(body.clip);
-        if (!clip) return res.status(400).json({ error: 'Некорректный файл клипа' });
-        next.clip = clip;
-      }
+      else { const clip = clipPathOf(body.clip); if (!clip) return res.status(400).json({ error: 'Некорректный файл клипа' }); next.clip = clip; }
     }
     let write = null; let keepExt;
     if ('artwork' in body) {
@@ -171,10 +146,7 @@ export function registerArtistEdits(app) {
       if (write) { fs.mkdirSync(COVERS_DIR, { recursive: true }); fs.writeFileSync(coverPath(artistId, id, write.ext), write.buf); }
       save(all);
       if ('artwork' in body) removeCoverFiles(artistId, id, keepExt);
-    } catch (e) {
-      console.error('Правки треков артиста:', e.message);
-      return res.status(500).json({ error: 'Не удалось сохранить правки на сервере' });
-    }
+    } catch (e) { console.error('Правки треков артиста:', e.message); return res.status(500).json({ error: 'Не удалось сохранить правки на сервере' }); }
     if (oldClip && oldClip !== next.clip) void removeClipObject(oldClip);
     res.json({ ok: true });
   });
