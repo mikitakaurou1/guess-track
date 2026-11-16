@@ -3,8 +3,9 @@ import { FEATURED_MATCH, applyFeaturedOverrides, fetchFeaturedOverrides } from '
 
 export const LOAD_TIMEOUT_MS = 10_000;
 
-export const trackSrc = (t: { id: number; url: string }) =>
-  t.id < 0 && t.url ? t.url : `https://api.soundcloud.com/tracks/${t.id}`;
+// Ссылка, заданная админом в окне правки трека (src), имеет приоритет
+export const trackSrc = (t: { id: number; url: string; src?: string }) =>
+  t.src ? t.src : t.id < 0 && t.url ? t.url : `https://api.soundcloud.com/tracks/${t.id}`;
 
 const API_SRC = 'https://w.soundcloud.com/player/api.js';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -307,7 +308,7 @@ export class SoundCloudPlayer {
     this.warming = false;
   }
 
-  // Хост: прогреть уже подготовленный (предзагруженный) трек.
+  // Хозяин: прогреть уже подготовленный (предзагруженный) трек.
   // Вызывать только когда другой плеер молчит: два встроенных плеера SoundCloud не играют одновременно,
   // запуск одного ставит на паузу другой.
   async warmPrepared(): Promise<void> {
@@ -315,7 +316,7 @@ export class SoundCloudPlayer {
     await this.warmUp();
   }
 
-  // Хост, шаг 1: загрузить трек (и прогреть). Без запуска звука.
+  // Хозяин, шаг 1: загрузить трек (и прогреть). Без запуска звука.
   // lenient: если плеер загрузил трек, но не успел сообщить его данные, берём данные из списка (для предзагрузки).
   // undefined — запуск устарел, null — трек не загрузился
   async prepareTrack(track: Track, warm: boolean, lenient = false): Promise<Track | null | undefined> {
@@ -346,7 +347,7 @@ export class SoundCloudPlayer {
     return keepEdited(track, info);
   }
 
-  // Хост, шаг 2: запустить подготовленный трек.
+  // Хозяин, шаг 2: запустить подготовленный трек.
   // fast: трек уже прогрет и стоит на точке старта (игра с гостями): события прогресса принимаем сразу, без паузы 400 мс,
   // а если звук не пошёл, повторяем play().
   async startPrepared(fast = false): Promise<boolean> {

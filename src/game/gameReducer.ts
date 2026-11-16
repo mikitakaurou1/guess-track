@@ -21,7 +21,7 @@ export interface GameState {
   attempt: number;
   failStreak: number;
   stalled: boolean;
-  failedTracks: Track[]; // треки текущего раунда, которые так и не загрузились
+  failedTracks: Track[]; // треки, которые не загрузились в этом раунде (показываем названия на экране)
 }
 
 export type GameAction =
@@ -170,7 +170,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'TRACK_FAILED': {
       if (state.phase !== 'loading' || state.stalled || action.attempt !== state.attempt) return state;
-      // запоминаем, какой трек мы ждали: его название показывается на экране
       const failed = state.tracks[state.order[state.round]];
       const failedTracks = failed ? [...state.failedTracks, failed] : state.failedTracks;
       const failStreak = state.failStreak + 1;
