@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ARTISTS } from './artists.js';
-import { validateArtwork } from './manualTracks.js';
+import { validateArtwork, validateTrackUrl } from './manualTracks.js';
 import { clipPathOf, isClipPath, clipUrl, removeClipObject } from './clips.js';
 
 const DATA_DIR = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
@@ -14,6 +14,15 @@ const EXT = { png: 'png', jpeg: 'jpg', webp: 'webp', gif: 'gif' };
 const MIME = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 const MAX_FAILED_PER_HOUR = 10;
 const ARTIST_IDS = new Set(ARTISTS.map((a) => a.id));
+const NOT_A_TRACK = new Set(['sets', 'likes', 'tracks', 'albums', 'reposts', 'popular-tracks', 'following', 'followers']);
+
+// Ссылка на один трек SoundCloud: soundcloud.com/исполнитель/название (не профиль и не плейлист)
+function trackLink(raw) {
+  const url = validateTrackUrl(raw);
+  const parts = new URL(url).pathname.split('/').filter(Boolean);
+  if (parts.length !== 2 || NOT_A_TRACK.has(parts[1].toLowerCase())) throw new Error('Нужна ссылка именно на трек: soundcloud.com/исполнитель/название-трека');
+  return url;
+}
 
 let edits = {};
 try {
@@ -60,6 +69,8 @@ function overlayPool(artistId, list) {
     const art = artUrl(artistId, t.id, e);
     if (art) { out.artwork = art; edited.artwork = true; }
     if (isClipPath(e.clip)) out.clip = clipUrl(e.clip);
+    // Админ поменял ссылку: звук берётся оттуда, а название, исполнитель и обложка остаются как были (игра не подменяет их данными другого трека)
+    if (e.url) { out.url = e.url; out.src = e.url; edited.title = true; edited.artist = true; edited.artwork = true; }
     const hasEdited = Object.keys(edited).length > 0;
     return hasEdited || out.clip ? { ...out, ...(hasEdited ? { edited } : {}) } : t;
   });
@@ -119,6 +130,13 @@ export function registerArtistEdits(app) {
       const v = String(body[f]).trim();
       if (!v || v.length > 300) return res.status(400).json({ error: 'Название и исполнитель должны быть от 1 до 300 символов' });
       next[f] = v;
+    }
+    if ('url' in body) {
+      if (body.url === null) delete next.url;
+      else {
+        try { next.url = trackLink(body.url); }
+        catch (e) { return res.status(400).json({ error: e.message }); }
+      }
     }
     let oldClip = null;
     if ('clip' in body) {

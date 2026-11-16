@@ -1,6 +1,5 @@
 import type { Track } from '../types/game';
 import { API_BASE } from '../config';
-import { queueRepair } from './repairQueue';
 
 export const ARTIST_PREFIX = 'artist:';
 export interface ArtistInfo { id: string; name: string; artwork: string | null; count: number; status: 'ready' | 'building' | 'error'; }
@@ -44,32 +43,13 @@ export async function adminDeleteTrack(artistId: string, trackId: number): Promi
   await post('/api/artist-track-delete', { password: adminPassword(), artistId, trackId });
 }
 
-export async function adminEditArtistTrack(artistId: string, trackId: number, patch: { title?: string | null; artist?: string | null; artwork?: string | null }): Promise<void> {
+// url: ссылка на трек SoundCloud, по которой игра загружает звук (null — вернуть исходную)
+export async function adminEditArtistTrack(artistId: string, trackId: number, patch: { title?: string | null; artist?: string | null; artwork?: string | null; url?: string | null }): Promise<void> {
   await post('/api/artist-track-edit', { password: adminPassword(), artistId, trackId, ...patch });
 }
 
 export async function adminResetCover(artistId: string): Promise<void> {
   await post('/api/artist-cover-reset', { password: adminPassword(), artistId });
-}
-
-export interface RepostCandidate { id: number; title: string; artist: string; url: string; artwork?: string; durationMs: number; }
-
-// Перезаливы трека (то же название, почти та же длительность), найденные сервером на SoundCloud
-export async function adminRepostCandidates(artistId: string, trackId: number): Promise<RepostCandidate[]> {
-  const d = await post('/api/artist-repost-candidates', { password: adminPassword(), artistId, trackId });
-  return Array.isArray(d.candidates) ? (d.candidates as RepostCandidate[]) : [];
-}
-
-export async function adminMarkRegionOk(artistId: string, trackIds: number[]): Promise<void> {
-  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'ok', trackIds });
-}
-
-export async function adminBlockRegion(artistId: string, trackId: number): Promise<void> {
-  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'blocked', trackId });
-}
-
-export async function adminReplaceTrack(artistId: string, trackId: number, replacementId: number): Promise<void> {
-  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'replace', trackId, replacementId });
 }
 
 // Пересборка каталога артиста по кнопке (запускается на сервере в фоне)
@@ -130,31 +110,4 @@ export async function fetchArtistPool(id: string): Promise<Track[]> {
 
 export async function reportTrack(artistId: string, trackId: number, reason: ReportReason): Promise<void> {
   await post('/api/artist-report', { artistId, trackId, reason });
-}
-
-// Трек не загрузился в плеере (отправляется после того, как в той же игре заиграл другой трек). Ошибки не важны.
-export async function reportUnplayable(artistId: string, trackId: number): Promise<void> {
-  try { await post('/api/artist-unplayable', { artistId, trackId }); } catch { /* best effort */ }
-}
-
-export interface UnpinResult { unpinned: boolean; how: 'admin' | 'report'; note: string; }
-
-// Открепить трек, который не загрузился. Админ: трек сразу убирается из каталога артиста, а после игры для него ищется перезалив.
-// Остальные: обычная жалоба, сервер открепляет трек после подтверждения (SoundCloud или второй сигнал).
-export async function unpinUnplayable(artistId: string, trackId: number): Promise<UnpinResult> {
-  if (hasAdminKey()) {
-    try {
-      const d = await post('/api/artist-track-region', { password: adminPassword(), artistId, trackId, action: 'blocked' });
-      if (d.already === true) return { unpinned: true, how: 'admin', note: 'трека уже нет в каталоге' };
-      queueRepair(artistId, trackId);
-      return { unpinned: true, how: 'admin', note: 'не играет в вашем регионе, перезалив будет искаться после игры' };
-    } catch { /* пароль устарел или сервер ответил ошибкой: пробуем обычную жалобу */ }
-  }
-  try {
-    const d = await post('/api/artist-unplayable', { artistId, trackId });
-    if (d.unpinned === true) return { unpinned: true, how: 'report', note: 'сервер подтвердил, что трек недоступен' };
-    return { unpinned: false, how: 'report', note: d.ignored ? 'сервер пропустил сообщение (повтор или трек добавлен вручную)' : 'сообщение принято, для открепления нужно ещё одно подтверждение' };
-  } catch (e) {
-    return { unpinned: false, how: 'report', note: (e as Error).message };
-  }
 }

@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom';
 import type { GameState } from '../game/gameReducer';
 import type { Track } from '../types/game';
+import { useIsAdmin } from '../hooks/useIsAdmin';
 import PlayerCard from './PlayerCard';
 import AnswerPanel from './AnswerPanel';
 import RevealPanel from './RevealPanel';
@@ -10,6 +11,7 @@ import Equalizer from './Equalizer';
 import Icon from './Icon';
 interface Props { state: GameState; track: Track | null; positionMs: number; soundBlocked: boolean; nextBusy: boolean; onEnableSound: () => void; onBuzz: (player: number) => void; onSubmit: (text: string) => void; onTimeout: () => void; onSkip: () => void; onNext: () => void; onFinish: () => void; onRetry: () => void; }
 export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, onEnableSound, onBuzz: onBuzzRaw, onSubmit, onTimeout, onSkip, onNext, onFinish, onRetry }: Props) {
+  const isAdmin = useIsAdmin();
   const config = state.config!; const names = config.playerNames; const owners = config.owners ?? names.map(() => null);
   const canBuzz = state.phase === 'playing';
   // Нажатие «ЖМУ!»: сразу рисуем поле ответа и ставим в него курсор внутри того же жеста пользователя (так фокус разрешён и на телефоне)
@@ -24,10 +26,15 @@ export default function GameScreen({ state, positionMs, soundBlocked, nextBusy, 
   else if (state.phase === 'answering' && state.current !== null) status = 'Пауза — идёт ответ';
   const record = state.history[state.history.length - 1]; const la = state.lastAttempt; const total = state.order.length;
   const done = state.round + (state.phase === 'reveal' ? 1 : 0);
+  const failed = state.failedTracks.slice(-4);
   return <section className='glass'>
     <div className='row between'><div className='round-info'>Трек <b className='grad'>{state.round + 1}</b> / {total}</div><button className='btn btn-ghost' onClick={() => confirm('Завершить игру?') && onFinish()}>Завершить</button></div>
     <div className='mini-progress'><div style={{ width: `${done / total * 100}%` }}/></div>
     <Equalizer active={state.phase === 'playing' || state.phase === 'reveal'}/><div className='status'>{status}</div>
+    {failed.length > 0 && <div className='toast bad' role='status'>
+      {failed.map((t, i) => <div key={`${t.id}-${i}`}>Трек не загрузился, но мы ждали «<b>{t.title || 'без названия'}</b>»{t.artist ? ` — ${t.artist}` : ''}…{isAdmin && t.url ? <> <a href={t.url} target='_blank' rel='noreferrer'>ссылка на трек</a></> : null}</div>)}
+      {isAdmin && <div className='muted small'>Админ: чтобы подменить ссылку, откройте список треков артиста → «Править» → «Ссылка на трек SoundCloud».</div>}
+    </div>}
     {state.phase !== 'reveal' && <ProgressBar fraction={clipLeft}/>}
     {state.phase === 'loading' && soundBlocked && !state.stalled && <div className='row center'><button className='btn btn-primary btn-lg' onClick={onEnableSound}><Icon name='volume' size={18}/> Включить звук</button></div>}
     {la && state.phase !== 'reveal' && <div className='toast bad'><Icon name='x-circle' size={16}/> <b>{names[la.playerIndex]}</b>: {la.timeout ? 'время вышло' : `«${la.text}» — неверно`}. Право ответа у остальных!</div>}

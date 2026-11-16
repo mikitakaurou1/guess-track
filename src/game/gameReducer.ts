@@ -21,6 +21,7 @@ export interface GameState {
   attempt: number;
   failStreak: number;
   stalled: boolean;
+  failedTracks: Track[]; // треки текущего раунда, которые так и не загрузились
 }
 
 export type GameAction =
@@ -57,6 +58,7 @@ export const initialState: GameState = {
   attempt: 0,
   failStreak: 0,
   stalled: false,
+  failedTracks: [],
 };
 
 export function selectCurrentTrack(s: GameState): Track | null {
@@ -158,6 +160,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         artwork: action.info.artwork || old.artwork,
         edited: old.edited,
         clip: old.clip,
+        src: old.src,
       };
       return { ...state, tracks };
     }
@@ -167,8 +170,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'TRACK_FAILED': {
       if (state.phase !== 'loading' || state.stalled || action.attempt !== state.attempt) return state;
+      // запоминаем, какой трек мы ждали: его название показывается на экране
+      const failed = state.tracks[state.order[state.round]];
+      const failedTracks = failed ? [...state.failedTracks, failed] : state.failedTracks;
       const failStreak = state.failStreak + 1;
-      if (failStreak >= 4) return { ...state, failStreak, stalled: true };
+      if (failStreak >= 4) return { ...state, failStreak, stalled: true, failedTracks };
 
       // замена треком из того же источника, чтобы сохранить баланс
       const src = state.tracks[state.order[state.round]]?.source ?? 0;
@@ -178,14 +184,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const order = [...state.order];
         order[state.round] = next;
         const reserve = state.reserve.map((r, i) => (i === src ? rest : r));
-        return { ...state, order, reserve, attempt: state.attempt + 1, failStreak };
+        return { ...state, order, reserve, attempt: state.attempt + 1, failStreak, failedTracks };
       }
-      if (state.round + 1 >= state.order.length) return { ...state, phase: 'final' };
+      if (state.round + 1 >= state.order.length) return { ...state, phase: 'final', failedTracks };
       return {
         ...state,
         round: state.round + 1,
         attempt: state.attempt + 1,
         failStreak,
+        failedTracks,
         locked: [],
         current: null,
         result: null,
@@ -258,6 +265,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         result: null,
         attempts: [],
         lastAttempt: null,
+        failedTracks: [],
       };
 
     case 'FINISH':
