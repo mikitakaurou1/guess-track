@@ -11,6 +11,13 @@ const { registerArtistRoutes } = await import('./artists.js');
 const { registerArtistEdits } = await import('./artistEdits.js');
 const { registerFeaturedRoutes, overlayPlaylistInfo } = await import('./featured.js');
 
+let registerDesktopLibrary = null;
+try {
+  ({ registerDesktopLibrary } = await import('./desktopLibrary.js'));
+} catch (e) {
+  console.error('Desktop-библиотека не подключена:', e.message);
+}
+
 const PORT = process.env.PORT ?? 3001;
 const MAX_GUESTS = 10;
 const UA =
@@ -202,6 +209,12 @@ registerArtistEdits(app);
 registerArtistRoutes(app, v2);
 // Правки админа в плейлисте GuessTrack: см. server/featured.js
 registerFeaturedRoutes(app);
+
+try {
+  registerDesktopLibrary?.(app);
+} catch (e) {
+  console.error('Desktop-библиотека не запущена:', e.message);
+}
 
 /* ---------- Комнаты (WebSocket-ретранслятор) ---------- */
 const server = http.createServer(app);
