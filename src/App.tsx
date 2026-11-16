@@ -7,6 +7,7 @@ import GuestApp from './components/GuestApp';
 import SonglessGame from './components/SonglessGame';
 import Deco from './components/Deco';
 import Logo from './components/Logo';
+import AdminLog from './components/AdminLog';
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
@@ -65,5 +66,5 @@ export default function App() {
         {state.phase === 'final' && state.config && <FinalScreen names={state.config.playerNames} avatars={state.config.avatars} scores={state.scores} history={state.history} onRestart={reset}/>}
       </>}
       <p className='muted small center-text dev-credit' onClick={tapDeveloper}>разработчик: mikitakaurou</p>
-    </main></>;
+    </main><AdminLog/></>;
 }

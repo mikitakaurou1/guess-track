@@ -22,12 +22,11 @@ export const hasAdminKey = (): boolean => !!localStorage.getItem(ADMIN_KEY);
 export const clearAdminKey = (): void => { localStorage.removeItem(ADMIN_KEY); notifyAdminChanged(); };
 export const adminPassword = (): string => localStorage.getItem(ADMIN_KEY) ?? '';
 
-async function post(path: string, body: unknown): Promise<void> {
+async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   const r = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
-  if (!r.ok) {
-    const data = await r.json().catch(() => ({}));
-    throw new Error(data.error ?? `Ошибка сервера (${r.status})`);
-  }
+  const data = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!r.ok) throw new Error(typeof data.error === 'string' ? data.error : `Ошибка сервера (${r.status})`);
+  return data;
 }
 
 export async function adminLogin(password: string): Promise<void> {
@@ -109,4 +108,27 @@ export async function reportTrack(artistId: string, trackId: number, reason: Rep
 // Трек не загрузился в плеере (отправляется после того, как в той же игре заиграл другой трек). Ошибки не важны.
 export async function reportUnplayable(artistId: string, trackId: number): Promise<void> {
   try { await post('/api/artist-unplayable', { artistId, trackId }); } catch { /* best effort */ }
+}
+
+export interface UnpinResult { unpinned: boolean; how: 'admin' | 'report'; note: string; }
+
+// Открепить трек, который не загрузился. Админ: трек сразу убирается из каталога артиста.
+// Остальные: обычная жалоба, сервер открепляет трек после подтверждения (SoundCloud или второй сигнал).
+export async function unpinUnplayable(artistId: string, trackId: number): Promise<UnpinResult> {
+  if (hasAdminKey()) {
+    try {
+      await post('/api/artist-track-delete', { password: adminPassword(), artistId, trackId });
+      return { unpinned: true, how: 'admin', note: 'удалён из каталога артиста' };
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg === 'Трека нет в каталоге') return { unpinned: true, how: 'admin', note: 'трека уже нет в каталоге' };
+    }
+  }
+  try {
+    const d = await post('/api/artist-unplayable', { artistId, trackId });
+    if (d.unpinned === true) return { unpinned: true, how: 'report', note: 'сервер подтвердил, что трек недоступен' };
+    return { unpinned: false, how: 'report', note: d.ignored ? 'сервер пропустил сообщение (повтор или трек добавлен вручную)' : 'сообщение принято, для открепления нужно ещё одно подтверждение' };
+  } catch (e) {
+    return { unpinned: false, how: 'report', note: (e as Error).message };
+  }
 }
