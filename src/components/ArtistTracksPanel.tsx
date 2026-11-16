@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Icon from './Icon';
-import { adminDeleteTrack, adminEditArtistTrack, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
+import { adminDeleteTrack, adminEditArtistTrack, adminRebuildArtist, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
+import { checkArtistRegion, stopRegionCheck } from '../services/regionCheck';
 import { API_BASE } from '../config';
 import { uploadClip } from '../services/clipUpload';
 import { imageFileToJpegDataUrl } from '../utils/imageData';
@@ -37,13 +38,15 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const [eClipRemove, setEClipRemove] = useState(false);
   const [eFile, setEFile] = useState<File | null>(null);
   const [editBusy, setEditBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkText, setCheckText] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const currentArtist = useRef(artist.id); currentArtist.current = artist.id;
   const version = useRef(0);
   useEffect(() => {
     let cancelled = false;
     const revision = ++version.current;
-    setTracks(null); setError(''); setSaved(''); setFormOpen(false); setTitle(''); setPerformer(artist.name); setUrl(''); setCoverUrl(''); setFile(null); setEditId(null);
+    setTracks(null); setError(''); setSaved(''); setFormOpen(false); setTitle(''); setPerformer(artist.name); setUrl(''); setCoverUrl(''); setFile(null); setEditId(null); setCheckText('');
     fetchArtistPool(artist.id)
       .then(list => { if (!cancelled && version.current === revision) setTracks(list); })
       .catch(e => { if (!cancelled && version.current === revision) setError((e as Error).message); });
@@ -118,16 +121,40 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
     } catch (err) { if (currentArtist.current === id) setError((err as Error).message); }
     finally { setSaving(false); }
   };
-  const locked = busyId !== null || saving || editBusy;
+  const runCheck = async () => {
+    if (checking) return;
+    const id = artist.id; setChecking(true); setError(''); setCheckText('Запуск проверки…');
+    try {
+      const r = await checkArtistRegion(id, text => { if (currentArtist.current === id) setCheckText(text); });
+      if (currentArtist.current === id) setCheckText(r.summary);
+      await refresh(id);
+      onRemoved(id);
+    } catch (err) { if (currentArtist.current === id) { setError((err as Error).message); setCheckText(''); } }
+    finally { setChecking(false); }
+  };
+  const rebuild = async () => {
+    if (!confirm(`Пересобрать каталог «${artist.name}» заново? Сервер снова опросит SoundCloud и Genius (треки из «Добавить трек» и перезаливы сохранятся).`)) return;
+    setError('');
+    try {
+      const r = await adminRebuildArtist(artist.id);
+      setCheckText(r.busy ? 'Каталог уже собирается' : 'Пересборка запущена. Обновите список через пару минут (закройте и откройте артиста)');
+    } catch (err) { setError((err as Error).message); }
+  };
+  const locked = busyId !== null || saving || editBusy || checking;
   return <div className='tracks-panel'>
     <div className='tracks-head'>
       <b>{artist.name}</b><span className='muted small'>{tracks ? `${tracks.length} треков` : ''}</span>
       <div className='tracks-actions'>
-        <button className='chip' disabled={saving} onClick={() => { setFormOpen(x => !x); setSaved(''); }}>Добавить трек</button>
+        <button className='chip' disabled={saving || checking} onClick={() => { setFormOpen(x => !x); setSaved(''); }}>Добавить трек</button>
+        {checking
+          ? <button className='chip' onClick={stopRegionCheck}>Остановить проверку</button>
+          : <button className='chip' disabled={locked || !tracks} onClick={runCheck}>Проверить в моём регионе</button>}
+        <button className='chip' disabled={locked} onClick={rebuild}>Пересобрать каталог</button>
         <button className='chip' onClick={() => onResetCover(artist.id)}>Сбросить обложку</button>
         <button className='chip' onClick={onClose}>Закрыть</button>
       </div>
     </div>
+    {checkText && <p role='status' className='muted small'>{checkText}</p>}
     {formOpen && <form className='block' onSubmit={add}>
       <label>Название трека<input className='input' required maxLength={300} value={title} disabled={saving} onChange={e => setTitle(e.target.value)} /></label>
       <label>Исполнитель<input className='input' required maxLength={300} value={performer} disabled={saving} onChange={e => setPerformer(e.target.value)} /></label>
@@ -147,7 +174,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
           {t.artwork ? <img className='feat-thumb' src={t.artwork} alt='' referrerPolicy='no-referrer' /> : <div className='feat-thumb' />}
           <div className='tracks-tx'>
             <a href={t.url} target='_blank' rel='noreferrer'>{t.title}</a>
-            <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}{t.clip ? ' · есть клип' : ''}</div>
+            <div className='muted small'>{t.artist}{t.manual ? ' · Добавлен вручную' : ''}{t.repost ? ' · перезалив' : ''}{t.checked ? ' · проверен у вас' : ''}{t.clip ? ' · есть клип' : ''}</div>
           </div>
           <div className='feat-actions'>
             <button className='btn btn-ghost' disabled={locked} onClick={() => startEdit(t)}>Править</button>

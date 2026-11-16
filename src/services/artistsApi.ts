@@ -1,5 +1,6 @@
 import type { Track } from '../types/game';
 import { API_BASE } from '../config';
+import { queueRepair } from './repairQueue';
 
 export const ARTIST_PREFIX = 'artist:';
 export interface ArtistInfo { id: string; name: string; artwork: string | null; count: number; status: 'ready' | 'building' | 'error'; }
@@ -49,6 +50,32 @@ export async function adminEditArtistTrack(artistId: string, trackId: number, pa
 
 export async function adminResetCover(artistId: string): Promise<void> {
   await post('/api/artist-cover-reset', { password: adminPassword(), artistId });
+}
+
+export interface RepostCandidate { id: number; title: string; artist: string; url: string; artwork?: string; durationMs: number; }
+
+// Перезаливы трека (то же название, почти та же длительность), найденные сервером на SoundCloud
+export async function adminRepostCandidates(artistId: string, trackId: number): Promise<RepostCandidate[]> {
+  const d = await post('/api/artist-repost-candidates', { password: adminPassword(), artistId, trackId });
+  return Array.isArray(d.candidates) ? (d.candidates as RepostCandidate[]) : [];
+}
+
+export async function adminMarkRegionOk(artistId: string, trackIds: number[]): Promise<void> {
+  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'ok', trackIds });
+}
+
+export async function adminBlockRegion(artistId: string, trackId: number): Promise<void> {
+  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'blocked', trackId });
+}
+
+export async function adminReplaceTrack(artistId: string, trackId: number, replacementId: number): Promise<void> {
+  await post('/api/artist-track-region', { password: adminPassword(), artistId, action: 'replace', trackId, replacementId });
+}
+
+// Пересборка каталога артиста по кнопке (запускается на сервере в фоне)
+export async function adminRebuildArtist(artistId: string): Promise<{ started: boolean; busy: boolean }> {
+  const d = await post('/api/artist-rebuild', { password: adminPassword(), artistId });
+  return { started: d.started === true, busy: d.busy === true };
 }
 
 function bufferToBase64(buf: ArrayBuffer): string {
@@ -112,17 +139,16 @@ export async function reportUnplayable(artistId: string, trackId: number): Promi
 
 export interface UnpinResult { unpinned: boolean; how: 'admin' | 'report'; note: string; }
 
-// Открепить трек, который не загрузился. Админ: трек сразу убирается из каталога артиста.
+// Открепить трек, который не загрузился. Админ: трек сразу убирается из каталога артиста, а после игры для него ищется перезалив.
 // Остальные: обычная жалоба, сервер открепляет трек после подтверждения (SoundCloud или второй сигнал).
 export async function unpinUnplayable(artistId: string, trackId: number): Promise<UnpinResult> {
   if (hasAdminKey()) {
     try {
-      await post('/api/artist-track-delete', { password: adminPassword(), artistId, trackId });
-      return { unpinned: true, how: 'admin', note: 'удалён из каталога артиста' };
-    } catch (e) {
-      const msg = (e as Error).message;
-      if (msg === 'Трека нет в каталоге') return { unpinned: true, how: 'admin', note: 'трека уже нет в каталоге' };
-    }
+      const d = await post('/api/artist-track-region', { password: adminPassword(), artistId, trackId, action: 'blocked' });
+      if (d.already === true) return { unpinned: true, how: 'admin', note: 'трека уже нет в каталоге' };
+      queueRepair(artistId, trackId);
+      return { unpinned: true, how: 'admin', note: 'не играет в вашем регионе, перезалив будет искаться после игры' };
+    } catch { /* пароль устарел или сервер ответил ошибкой: пробуем обычную жалобу */ }
   }
   try {
     const d = await post('/api/artist-unplayable', { artistId, trackId });

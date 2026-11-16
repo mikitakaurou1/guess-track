@@ -1,4 +1,6 @@
 // Каталоги SoundCloud со сверкой Genius. Ручные добавления хранятся отдельно и имеют приоритет.
+// Готовый каталог артиста сохраняется в artist-catalogs.json (папка данных, её синхронизирует persist.js с Supabase) и при запуске читается оттуда:
+// Genius и SoundCloud опрашиваются один раз, пересборка только по кнопке админа. Без сверки с Genius каталог не собирается и не сохраняется.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -44,14 +46,14 @@ export const ARTISTS = [
   A('icegergert', 'ICEGERGERT', ['ICEGERGERT'], { genius: [G('Icegergert', 'ICEGERGERT')] }),
   A('9mice', '9mice', ['9mice'], { genius: [G('9mice', '9mice')] }),
 ];
-const TTL_MS = 12 * 60 * 60 * 1000;
 const RETRY_AFTER_FAIL_MS = 60 * 1000;
+const GENIUS_RETRY_MS = 30 * 60 * 1000;
 const MIN_MS = 45_000;
 const MAX_MS = 600_000;
 const MAX_PARALLEL = 3;
 const PAGE_DELAY_MS = 120;
 const MAX_COVER_BYTES = 1.5 * 1024 * 1024;
-const MIN_GENIUS_TRACKS = 10;
+const MAX_CANDIDATES = 6;
 const UNPIN_AFTER = 2;
 const FAIL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const SAME_REPORTER_GAP_MS = 30 * 60 * 1000;
@@ -62,6 +64,8 @@ const BLOCKLIST_FILE = process.env.BLOCKLIST_FILE ?? path.join(path.dirname(file
 const ORDER_FILE = process.env.ARTIST_ORDER_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'artist-order.json');
 const COVERS_DIR = process.env.ARTIST_COVERS_DIR ?? path.join(path.dirname(BLOCKLIST_FILE), 'covers');
 const FAILURES_FILE = process.env.TRACK_FAILURES_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'track-failures.json');
+const CATALOG_FILE = process.env.ARTIST_CATALOGS_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'artist-catalogs.json');
+const REGION_OK_FILE = process.env.REGION_OK_FILE ?? path.join(path.dirname(BLOCKLIST_FILE), 'region-ok.json');
 const MAX_REPORTS_PER_HOUR = 30;
 const MAX_FAILED_LOGINS_PER_HOUR = 10;
 function readJson(file, fallback) {
@@ -78,6 +82,12 @@ const manual = createManualTracks(BLOCKLIST_FILE);
 let failures = readJson(FAILURES_FILE, {});
 if (!failures || typeof failures !== 'object' || Array.isArray(failures)) failures = {};
 const saveFailures = () => { try { writeJson(FAILURES_FILE, failures, 'счётчики ошибок воспроизведения'); } catch { /* не критично */ } };
+let regionOk = readJson(REGION_OK_FILE, {});
+if (!regionOk || typeof regionOk !== 'object' || Array.isArray(regionOk)) regionOk = {};
+const saveRegionOk = () => writeJson(REGION_OK_FILE, regionOk, 'треки, проверенные в регионе админа');
+const isRegionOk = (artistId, trackId) => !!regionOk[artistId]?.[trackId];
+const catalogFile = readJson(CATALOG_FILE, null);
+const storedCatalogs = catalogFile && catalogFile.version === 1 && catalogFile.artists && typeof catalogFile.artists === 'object' ? catalogFile.artists : {};
 let order = readJson(ORDER_FILE, []);
 if (!Array.isArray(order)) order = [];
 order = order.map(String);
@@ -173,6 +183,7 @@ function isPlayable(t) {
 const isPlayableLegacy = t => !(t.policy === 'BLOCK' || t.policy === 'SNIP' || t.access === 'blocked' || t.access === 'preview');
 const big = u => u ? String(u).replace('-large', '-t300x300') : null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const durationOf = t => t?.full_duration ?? t?.duration ?? 0;
 async function fetchPage(v2, url) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try { return await v2(url); }
@@ -233,6 +244,7 @@ async function loadGeniusKeys(def, aliasesLower) {
   }
   return { keys, total };
 }
+function geniusError(message) { const e = new Error(message); e.genius = true; return e; }
 async function build(def, v2) {
   const legacy = def.legacy === true;
   const aliasesN = def.aliases.map(norm);
@@ -240,11 +252,11 @@ async function build(def, v2) {
   const own = new Set(); let avatar = null; let bestFollowers = -1; const raw = [];
   let genius = null;
   if (!legacy && def.genius?.length) {
-    if (!GENIUS_TOKEN) console.warn('GENIUS_ACCESS_TOKEN не задан: сверка с Genius отключена');
-    else {
-      try { genius = await loadGeniusKeys(def, aliasesLower); console.log(`Genius «${def.name}»: ${genius.total} песен, ${genius.keys.size} названий после фильтра сниппетов`); }
-      catch (e) { console.error(`Genius «${def.name}»:`, e.message); }
-    }
+    if (!GENIUS_TOKEN) throw geniusError('GENIUS_ACCESS_TOKEN не задан: без сверки с Genius каталог не собираем');
+    try { genius = await loadGeniusKeys(def, aliasesLower); }
+    catch (e) { throw geniusError(`Genius недоступен (${e.message}): без сверки каталог не собираем`); }
+    if (!genius.keys.size) throw geniusError('Genius вернул пустой список песен: каталог не собираем');
+    console.log(`Genius «${def.name}»: ${genius.total} песен, ${genius.keys.size} названий после фильтра сниппетов`);
   }
   for (const a of def.aliases.slice(0, 3)) {
     try {
@@ -279,17 +291,34 @@ async function build(def, v2) {
     }
     return [...best.values()];
   };
-  let entries = pick(genius?.keys ?? null);
-  if (genius) {
-    console.log(`Каталог «${def.name}»: после сверки с Genius ${entries.length} треков`);
-    if (entries.length < MIN_GENIUS_TRACKS) { console.warn(`Каталог «${def.name}»: меньше ${MIN_GENIUS_TRACKS} треков после сверки, оставляем список без сверки с Genius`); entries = pick(null); }
-  }
+  const entries = pick(genius?.keys ?? null);
+  if (genius) console.log(`Каталог «${def.name}»: после сверки с Genius ${entries.length} треков`);
   if (!entries.length) throw new Error('Треки не найдены');
   const top = [...entries].sort((a, b) => b.score - a.score).find(x => x.t.artwork_url);
   const tracks = entries.map(({ t }) => ({ id: t.id, title: t.title ?? '', artist: t.publisher_metadata?.artist || t.user?.username || '', url: t.permalink_url ?? '', artwork: big(t.artwork_url || t.user?.avatar_url) ?? undefined }));
   return { tracks, artwork: avatar ?? big(top?.t.artwork_url) };
 }
-const state = new Map(ARTISTS.map(def => [def.id, { def, tracks: null, artwork: null, at: 0, failedAt: 0, promise: null, job: null }]));
+const state = new Map(ARTISTS.map(def => {
+  const st = storedCatalogs[def.id];
+  const ok = Array.isArray(st?.tracks) && st.tracks.length > 0;
+  return [def.id, { def, tracks: ok ? st.tracks : null, artwork: ok ? st.artwork ?? null : null, at: ok ? Number(st.at) || Date.now() : 0, failedAt: 0, retryMs: 0, promise: null, job: null }];
+}));
+console.log(`Каталоги артистов: из хранилища восстановлено ${[...state.values()].filter(s => s.tracks).length} из ${ARTISTS.length}`);
+let catalogTimer = null;
+function saveCatalogs() {
+  if (catalogTimer) return;
+  catalogTimer = setTimeout(() => {
+    catalogTimer = null;
+    const artists = {};
+    for (const s of state.values()) if (s.tracks?.length) artists[s.def.id] = { at: s.at, artwork: s.artwork ?? null, tracks: s.tracks };
+    try {
+      fs.mkdirSync(path.dirname(CATALOG_FILE), { recursive: true });
+      const tmp = `${CATALOG_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify({ version: 1, artists }));
+      fs.renameSync(tmp, CATALOG_FILE);
+    } catch (e) { console.error('Не удалось сохранить каталоги артистов:', e.message); }
+  }, 500);
+}
 function combined(s) {
   const byId = new Map((s.tracks ?? []).map(t => [t.id, t]));
   for (const t of manual.list(s.def.id)) byId.set(t.id, t);
@@ -301,19 +330,20 @@ function orderedStates() {
 }
 const queue = []; let running = 0;
 function pump() { while (running < MAX_PARALLEL && queue.length) { const job = queue.shift(); running++; job().finally(() => { running--; pump(); }); } }
-function ensure(s, v2, urgent = false) {
+// Готовый каталог из хранилища не пересобирается (ни по таймеру, ни при запуске); force=true — пересборка по кнопке админа.
+function ensure(s, v2, urgent = false, force = false) {
   if (s.promise) {
     if (urgent && s.job) { const i = queue.indexOf(s.job); if (i > 0) { queue.splice(i, 1); queue.unshift(s.job); } }
     return s.promise;
   }
-  if (s.tracks && Date.now() - s.at <= TTL_MS) return Promise.resolve();
-  if (s.failedAt && Date.now() - s.failedAt < RETRY_AFTER_FAIL_MS) return Promise.resolve();
+  if (s.tracks && !force) return Promise.resolve();
+  if (!force && s.failedAt && Date.now() - s.failedAt < (s.retryMs || RETRY_AFTER_FAIL_MS)) return Promise.resolve();
   let job;
   s.promise = new Promise(resolve => {
     job = () => {
       s.job = null;
-      return build(s.def, v2).then(r => { s.tracks = r.tracks; s.artwork = r.artwork; s.at = Date.now(); s.failedAt = 0; console.log(`Каталог «${s.def.name}»: ${r.tracks.length} треков`); })
-        .catch(e => { s.failedAt = Date.now(); console.error(`Каталог «${s.def.name}» не собран:`, e.message); })
+      return build(s.def, v2).then(r => { s.tracks = r.tracks; s.artwork = r.artwork; s.at = Date.now(); s.failedAt = 0; s.retryMs = 0; saveCatalogs(); console.log(`Каталог «${s.def.name}»: ${r.tracks.length} треков, сохранён`); })
+        .catch(e => { s.failedAt = Date.now(); s.retryMs = e.genius ? GENIUS_RETRY_MS : 0; console.error(`Каталог «${s.def.name}» не собран:`, e.message); })
         .finally(() => { s.promise = null; resolve(); });
     };
   });
@@ -325,17 +355,50 @@ const info = s => {
   return { id: s.def.id, name: s.def.name, artwork: cover ? `/api/artist-cover?id=${encodeURIComponent(s.def.id)}&v=${cover.v}` : s.artwork, count, status: s.tracks || count ? 'ready' : s.promise || !s.failedAt ? 'building' : 'error' };
 };
 function parseBody(req) { try { const b = JSON.parse(req.body); return b && typeof b === 'object' ? b : null; } catch { return null; } }
+const oneLine = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+// Перезаливы: другие загрузки того же трека (то же название с точностью до «Артист - » и скобок, длительность отличается не сильно)
+async function repostCandidates(s, orig, origId, v2) {
+  const aliasesLower = s.def.aliases.map(a => a.toLowerCase().replace(/ё/g, 'е'));
+  const origKeys = new Set(titleKeys(orig.title, aliasesLower));
+  const origMs = durationOf(orig);
+  const core = oneLine(String(orig.title ?? '').replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' '));
+  const queries = [...new Set([`${s.def.aliases[0]} ${core}`, core])].filter(q => q.trim().length >= 2);
+  const existing = new Set(combined(s).filter(t => t.id !== origId).flatMap(t => titleKeys(t.title, aliasesLower)));
+  const found = new Map();
+  for (const q of queries) {
+    try {
+      const data = await fetchPage(v2, `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(q)}&limit=50`);
+      for (const item of data?.collection ?? []) { const t = item.track ?? item; if (t?.id && (t.kind === 'track' || !t.kind)) found.set(t.id, t); }
+    } catch (e) { console.error('Перезаливы: ошибка поиска:', e.message); }
+    await sleep(PAGE_DELAY_MS);
+  }
+  const out = [];
+  for (const t of found.values()) {
+    if (t.id === origId || isBlocked(s.def.id, t.id)) continue;
+    if (!isPlayable(t) || isSnippet(t.title) || isStopped(t.title)) continue;
+    const ms = durationOf(t);
+    if (ms < MIN_MS || ms > MAX_MS) continue;
+    if (origMs && Math.abs(ms - origMs) > Math.max(5000, origMs * 0.06)) continue;
+    const keys = titleKeys(t.title, aliasesLower);
+    if (!keys.some(k => origKeys.has(k))) continue;
+    if (keys.some(k => existing.has(k))) continue;
+    out.push({ t, ms });
+  }
+  out.sort((a, b) => (b.t.playback_count ?? 0) - (a.t.playback_count ?? 0));
+  return out.slice(0, MAX_CANDIDATES).map(({ t, ms }) => ({ id: t.id, title: t.title ?? '', artist: t.publisher_metadata?.artist || t.user?.username || '', url: t.permalink_url ?? '', artwork: big(t.artwork_url || t.user?.avatar_url) ?? undefined, durationMs: ms }));
+}
 export function registerArtistRoutes(app, v2) {
   const textBody = express.text({ type: () => true, limit: '8kb' });
   const bigTextBody = express.text({ type: () => true, limit: '3mb' });
+  const present = s => combined(s).map(t => (isRegionOk(s.def.id, t.id) ? { ...t, checked: true } : t));
   app.get('/api/artists', (req, res) => { const list = orderedStates(); list.forEach(s => { void ensure(s, v2); }); res.json(list.map(info)); });
   app.get('/api/artist-pool', async (req, res) => {
     const s = state.get(String(req.query.id ?? ''));
     if (!s) return res.status(404).json({ error: 'Артист не найден' });
-    if (s.tracks || combined(s).length) { void ensure(s, v2); return res.json(combined(s)); }
+    if (s.tracks || combined(s).length) { void ensure(s, v2); return res.json(present(s)); }
     await ensure(s, v2, true);
     if (!s.tracks && !combined(s).length) return res.status(502).json({ error: `Не удалось собрать треки «${s.def.name}». Попробуйте через минуту.` });
-    res.json(combined(s));
+    res.json(present(s));
   });
   app.get('/api/artist-cover', (req, res) => {
     const id = String(req.query.id ?? ''); const cover = state.has(id) ? findCover(id) : null;
@@ -445,6 +508,92 @@ export function registerArtistRoutes(app, v2) {
     } catch (e) { console.error('Добавление трека:', e.message); res.status(502).json({ error: 'Не удалось проверить трек в SoundCloud. Проверьте ссылку и повторите.' }); }
     finally { adding.delete(s.def.id); }
   });
+  // Пересборка каталога по кнопке админа: запускается в фоне, старый каталог остаётся, пока новый не собран
+  app.post('/api/artist-rebuild', textBody, (req, res) => {
+    const body = adminGate(req, res); if (!body) return;
+    const s = state.get(String(body.artistId ?? '')); if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
+    if (s.promise) return res.json({ ok: true, started: false, busy: true });
+    void ensure(s, v2, true, true);
+    res.json({ ok: true, started: true });
+  });
+  // Поиск перезаливов трека (трек может быть уже откреплён)
+  app.post('/api/artist-repost-candidates', textBody, async (req, res) => {
+    const body = adminGate(req, res); if (!body) return;
+    const s = state.get(String(body.artistId ?? '')); const trackId = Number(body.trackId);
+    if (!s || !Number.isSafeInteger(trackId) || trackId <= 0) return res.status(400).json({ error: 'Некорректный запрос' });
+    try {
+      let orig = null;
+      try { orig = await v2(`https://api-v2.soundcloud.com/tracks/${trackId}`); } catch { /* трек мог быть удалён */ }
+      const known = combined(s).find(t => t.id === trackId);
+      const title = orig?.title ?? known?.title ?? blocked[s.def.id]?.[trackId]?.title;
+      if (!title) return res.status(404).json({ error: 'Не удалось определить название трека' });
+      const candidates = await repostCandidates(s, { title, duration: orig?.duration, full_duration: orig?.full_duration }, trackId, v2);
+      res.json({ ok: true, candidates });
+    } catch (e) { console.error('Перезаливы:', e.message); res.status(502).json({ error: 'Не удалось найти перезаливы' }); }
+  });
+  // Результат проверки в регионе админа: ok (треки играют), blocked (открепить), replace (заменить перезаливом)
+  const repairing = new Set();
+  app.post('/api/artist-track-region', textBody, async (req, res) => {
+    const body = adminGate(req, res); if (!body) return;
+    const s = state.get(String(body.artistId ?? '')); if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
+    const action = String(body.action ?? '');
+    const stamp = new Date().toISOString();
+    if (action === 'ok') {
+      const ids = (Array.isArray(body.trackIds) ? body.trackIds : []).map(Number).filter(n => Number.isSafeInteger(n) && n > 0).slice(0, 200);
+      const previous = regionOk[s.def.id];
+      regionOk[s.def.id] = { ...(previous ?? {}), ...Object.fromEntries(ids.map(id => [id, stamp])) };
+      try { saveRegionOk(); } catch { if (previous) regionOk[s.def.id] = previous; else delete regionOk[s.def.id]; return res.status(500).json({ error: 'Не удалось сохранить отметки' }); }
+      return res.json({ ok: true });
+    }
+    const trackId = Number(body.trackId);
+    if (!Number.isSafeInteger(trackId) || trackId <= 0) return res.status(400).json({ error: 'Некорректный запрос' });
+    if (action === 'blocked') {
+      const track = combined(s).find(t => t.id === trackId);
+      if (!track) return res.json({ ok: true, already: true });
+      const previous = blocked[s.def.id];
+      blocked[s.def.id] = { ...(previous ?? {}), [trackId]: { reason: 'region', title: track.title, at: stamp } };
+      try { saveBlocked(); } catch { blocked[s.def.id] = previous; return res.status(500).json({ error: 'Не удалось сохранить блокировку' }); }
+      if (s.tracks) s.tracks = s.tracks.filter(t => t.id !== trackId);
+      console.log(`Трек ${trackId} «${track.title}» у «${s.def.name}» не играет в регионе админа: откреплён`);
+      return res.json({ ok: true, count: combined(s).length });
+    }
+    if (action === 'replace') {
+      const newId = Number(body.replacementId);
+      if (!Number.isSafeInteger(newId) || newId <= 0 || newId === trackId) return res.status(400).json({ error: 'Некорректный перезалив' });
+      if (repairing.has(s.def.id)) return res.status(409).json({ error: 'Дождитесь окончания предыдущей замены' });
+      repairing.add(s.def.id);
+      try {
+        const t = await Promise.race([
+          v2(`https://api-v2.soundcloud.com/tracks/${newId}`),
+          new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('SoundCloud не ответил за 25 секунд')), 25_000); timer.unref?.(); }),
+        ]);
+        try { requirePlayableTrack(t); } catch (e) { return res.status(400).json({ error: e.message }); }
+        const known = combined(s).find(x => x.id === trackId);
+        let oldTitle = known?.title ?? blocked[s.def.id]?.[trackId]?.title; let oldArtist = known?.artist;
+        if (!oldTitle || !oldArtist) {
+          try { const o = await v2(`https://api-v2.soundcloud.com/tracks/${trackId}`); oldTitle = oldTitle || o.title; oldArtist = oldArtist || o.publisher_metadata?.artist || o.user?.username; } catch { /* оригинала уже нет */ }
+        }
+        const title = oneLine(oldTitle || t.title).slice(0, 300);
+        const artist = oneLine(oldArtist || s.def.name).slice(0, 300);
+        const track = { id: t.id, title, artist, url: validateTrackUrl(t.permalink_url), artwork: big(t.artwork_url || t.user?.avatar_url) ?? undefined, repost: true, repostOf: trackId };
+        try { manual.put(s.def.id, track); } catch (e) { console.error('Перезалив:', e.message); return res.status(500).json({ error: 'Не удалось сохранить перезалив на сервере' }); }
+        try {
+          const previous = blocked[s.def.id]; const next = { ...(previous ?? {}) };
+          if (next[newId]) delete next[newId];
+          if (!next[trackId]) next[trackId] = { reason: 'region', title, replacedBy: newId, at: stamp };
+          blocked[s.def.id] = next;
+          try { saveBlocked(); } catch (e) { blocked[s.def.id] = previous; throw e; }
+        } catch { return res.status(500).json({ error: 'Перезалив сохранён, но не удалось скрыть оригинал. Повторите замену.' }); }
+        regionOk[s.def.id] = { ...(regionOk[s.def.id] ?? {}), [newId]: stamp };
+        try { saveRegionOk(); } catch { /* отметка не критична */ }
+        if (s.tracks) s.tracks = s.tracks.filter(x => x.id !== trackId);
+        console.log(`Трек ${trackId} «${title}» у «${s.def.name}» заменён перезаливом ${newId}`);
+        return res.json({ ok: true, track, count: combined(s).length });
+      } catch (e) { console.error('Замена перезаливом:', e.message); return res.status(502).json({ error: 'Не удалось проверить перезалив в SoundCloud. Повторите.' }); }
+      finally { repairing.delete(s.def.id); }
+    }
+    res.status(400).json({ error: 'Неизвестное действие' });
+  });
   app.post('/api/artist-cover', bigTextBody, (req, res) => {
     const body = adminGate(req, res); if (!body) return;
     const s = state.get(String(body.artistId ?? '')); if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
@@ -455,5 +604,6 @@ export function registerArtistRoutes(app, v2) {
     const s = state.get(String(body.artistId ?? '')); if (!s) return res.status(400).json({ error: 'Некорректный запрос' });
     removeCovers(s.def.id); res.json({ ok: true });
   });
+  // Запуск: собираем только те каталоги, которых ещё нет в хранилище
   for (const s of orderedStates()) void ensure(s, v2);
 }

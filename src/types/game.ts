@@ -1,4 +1,4 @@
-export interface Track { id: number; title: string; artist: string; url: string; source?: number; artwork?: string; clip?: string; edited?: { title?: boolean; artist?: boolean; artwork?: boolean }; }
+export interface Track { id: number; title: string; artist: string; url: string; source?: number; artwork?: string; clip?: string; checked?: boolean; repost?: boolean; edited?: { title?: boolean; artist?: boolean; artwork?: boolean }; }
 export interface GameConfig { playerNames: string[]; avatars?: string[]; owners: (string | null)[]; clipSeconds: number; answerSeconds: number; trackCount: number; randomOrder: boolean; randomStart?: boolean; startSeed?: number; songless?: boolean; reverse?: boolean; }
 export type Phase = 'setup' | 'loading' | 'playing' | 'clipDone' | 'answering' | 'reveal' | 'final';
 export interface Attempt { playerIndex: number; text: string; correct: boolean; timeout?: boolean; reactionMs?: number; answerMs?: number; }

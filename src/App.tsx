@@ -11,9 +11,11 @@ import AdminLog from './components/AdminLog';
 import { useSoundCloud } from './hooks/useSoundCloud';
 import { useGame } from './hooks/useGame';
 import { useHostRoom } from './hooks/useRoom';
+import { useIsAdmin } from './hooks/useIsAdmin';
 import { buildSnapshot } from './game/snapshot';
 import { createReversePlayer } from './services/ReversePlayer';
 import { openAdminLogin } from './services/adminLogin';
+import { processRepairQueue } from './services/regionCheck';
 import { preloadClip } from './utils/clipCache';
 import type { GameConfig } from './types/game';
 const roomFromUrl = () => new URLSearchParams(location.search).get('room')?.toUpperCase() ?? '';
@@ -30,12 +32,14 @@ export default function App() {
   const room = useHostRoom(game.handleRemote); sendRef.current = room.send;
   const [mode, setMode] = useState<'host' | 'join'>(roomFromUrl() ? 'join' : 'host');
   const [songless, setSongless] = useState<GameConfig | null>(null);
+  const isAdmin = useIsAdmin();
   const { state } = game;
   useEffect(() => {
     if (state.phase === 'setup' || state.phase === 'final') return;
     preloadClip(state.tracks[state.order[state.round]]?.clip);
     preloadClip(state.tracks[state.order[state.round + 1]]?.clip);
   }, [state.phase, state.round, state.order, state.tracks]);
+  useEffect(() => { if (isAdmin && state.phase === 'setup' && !songless) void processRepairQueue(); }, [isAdmin, state.phase, songless]);
   const rsSeed = state.config?.randomStart ? (state.config.startSeed ?? 0) : null;
   const rsClip = state.config?.clipSeconds ?? 10;
   useLayoutEffect(() => { const m = rsSeed === null ? undefined : { seed: rsSeed, clipMs: rsClip * 1000 }; players?.forEach(p => p.setStartMode(m)); }, [players, rsSeed, rsClip]);
