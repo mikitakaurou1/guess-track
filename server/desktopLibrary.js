@@ -196,7 +196,14 @@ async function buildSnapshot() {
   const cover = await imageAsset(info.artwork);
   const featuredTracks = await mapLimit(info.tracks, 6, async (t) => {
     const m = await mapTrack(t);
-    return { ...m, edited: { ...(m.edited ?? {}), artist: true } };
+    return {
+      ...m,
+      edited: {
+        ...(m.edited ?? {}),
+        title: true,
+        artist: true,
+      },
+    };
   });
   await addJson('featured.json', {
     sourceUrl: FEATURED_URL,
