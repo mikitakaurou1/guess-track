@@ -64,7 +64,26 @@ function resolvedEdits() {
 
 export function overlayTracks(tracks) {
   const edits = resolvedEdits();
-  return (tracks ?? []).filter((t) => !data.removed[t.id]).map((t) => (edits[t.id] ? { ...t, ...edits[t.id] } : t));
+
+  return (tracks ?? [])
+    .filter((t) => !data.removed[t.id])
+    .map((t) => {
+      const edit = edits[t.id];
+
+      if (!edit) return t;
+
+      const edited = { ...(t.edited ?? {}) };
+
+      if (edit.title) edited.title = true;
+      if (edit.artist) edited.artist = true;
+      if (edit.artwork) edited.artwork = true;
+
+      return {
+        ...t,
+        ...edit,
+        edited,
+      };
+    });
 }
 
 export function overlayPlaylistInfo(cleanUrl, info) {
