@@ -15,6 +15,7 @@ interface Props { ready: boolean; busy: boolean; error: string | null; playlist:
 const FEATURED_URL = 'https://soundcloud.com/nikitkakovrov4/sets/guesstrack';
 const FEATURED_MATCH = 'nikitkakovrov4/sets/guesstrack';
 const MAX_PLAYERS = 10;
+const MAX_SOURCES = 20;
 const toNum = (s: string, min: number, max: number, fallback: number) => { const n = parseInt(s, 10); return Number.isNaN(n) ? fallback : Math.min(max, Math.max(min, n)); };
 const playersWord = (n: number) => n % 10 === 1 && n % 100 !== 11 ? 'игрок' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'игрока' : 'игроков';
 function NumberField({ value, onChange, min, max }: { value: string; onChange: (v: string) => void; min: number; max: number }) {
@@ -39,13 +40,13 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
   const effLocal = solo ? 1 : localCount;
   const total = playlist.length;
   const hasFeatured = urls.some(u => u.toLowerCase().includes(FEATURED_MATCH));
-  const canAddFeatured = urls.some(u => !u.trim()) || urls.length < 5;
+  const canAddFeatured = urls.some(u => !u.trim()) || urls.length < MAX_SOURCES;
   const addFeatured = () => {
     if (hasFeatured) return;
     setUrls(p => {
       const i = p.findIndex(x => !x.trim());
       if (i >= 0) return p.map((x, k) => k === i ? FEATURED_URL : x);
-      return p.length < 5 ? [...p, FEATURED_URL] : p;
+      return p.length < MAX_SOURCES ? [...p, FEATURED_URL] : p;
     });
   };
   const addArtist = (id: string) => {
@@ -54,7 +55,7 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       if (p.includes(value)) return p;
       const i = p.findIndex(x => !x.trim());
       if (i >= 0) return p.map((x, k) => k === i ? value : x);
-      return p.length < 5 ? [...p, value] : p;
+      return p.length < MAX_SOURCES ? [...p, value] : p;
     });
   };
   const load = () => {
@@ -69,11 +70,11 @@ export default function SetupScreen({ ready, busy, error, playlist, sources, roo
       <li><span className='howto-num'>1</span><div><b>Профиль — возьмём все лайки человека</b><span>Откройте страницу профиля на soundcloud.com и скопируйте адрес из строки браузера, например <code>soundcloud.com/username</code>. У этого пользователя лайки должны быть открыты для всех.</span></div></li>
       <li><span className='howto-num'>2</span><div><b>Плейлист или альбом — возьмём все его треки</b><span>Откройте плейлист, нажмите «Поделиться» → «Скопировать ссылку» (или возьмите адрес из строки браузера), например <code>soundcloud.com/username/sets/name</code>. Плейлист должен быть публичным или доступным по «секретной ссылке».</span></div></li>
       <li><span className='howto-num'>3</span><div><b>С телефона, из приложения SoundCloud</b><span>Нажмите «Поделиться» → «Скопировать ссылку» на профиле или плейлисте. Короткие ссылки вида <code>on.soundcloud.com/…</code> тоже подходят.</span></div></li>
-    </ul><div className='howto-note'><Icon name='x-circle' size={16}/><span>Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до 5 источников: тогда в игре будет поровну треков от каждого.</span></div></div><button className='howto-more' onClick={() => setHowtoOpen(o => !o)} aria-expanded={howtoOpen}>{howtoOpen ? 'свернуть' : 'ещё'}</button></div>
+    </ul><div className='howto-note'><Icon name='x-circle' size={16}/><span>Ссылка на один трек не подойдёт — нужен набор треков. Можно добавить до {MAX_SOURCES} источников: тогда в игре будет поровну треков от каждого.</span></div></div><button className='howto-more' onClick={() => setHowtoOpen(o => !o)} aria-expanded={howtoOpen}>{howtoOpen ? 'свернуть' : 'ещё'}</button></div>
     <FeaturedPlaylist url={FEATURED_URL} fallbackTitle='GuessTrack' fallbackCreator='nikitkakovrov4' added={hasFeatured} disabled={!canAddFeatured} onAdd={addFeatured}/>
     <ArtistCarousel urls={urls} disabled={!canAddFeatured} onAdd={addArtist}/>
     {urls.map((u, i) => <div key={i} className='name-field'><span className={`avatar c${i}`}>{i + 1}</span><input className='input' value={u.startsWith(ARTIST_PREFIX) ? `Артист: ${artistLabel(u)}` : u} readOnly={u.startsWith(ARTIST_PREFIX)} onChange={e => setUrls(p => p.map((x, k) => k === i ? e.target.value : x))} onKeyDown={e => e.key === 'Enter' && load()} placeholder='Вставьте ссылку SoundCloud: профиль или плейлист'/>{urls.length > 1 && <button className='btn btn-ghost' onClick={() => setUrls(p => p.filter((_, k) => k !== i))}><Icon name='x' size={16}/></button>}</div>)}
-    {urls.length < 5 && <button className='btn btn-ghost' onClick={() => setUrls(p => [...p, ''])}><Icon name='plus' size={16}/> Добавить ещё один источник</button>}
+    {urls.length < MAX_SOURCES && <button className='btn btn-ghost' onClick={() => setUrls(p => p.length < MAX_SOURCES ? [...p, ''] : p)}><Icon name='plus' size={16}/> Добавить ещё один источник</button>}
     <button className='btn btn-primary btn-lg' onClick={load} disabled={!ready || busy}>{busy ? 'Загружаем треки...' : ready ? 'Загрузить треки' : 'Подключаем SoundCloud...'}</button>
     {(localError || error) && <div className='error'>{localError || error}</div>}
     <button className='btn btn-ghost btn-lg' onClick={onJoinMode}>У меня есть код комнаты <Icon name='arrow-right' size={16}/></button>
