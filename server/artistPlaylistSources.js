@@ -4,7 +4,6 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ARTISTS } from './artists.js';
-import { requirePlayableTrack } from './manualTracks.js';
 
 const ROOT = path.dirname(process.env.BLOCKLIST_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'blocked.json'));
 const FILE = path.join(ROOT, 'artist-playlist-sources.json');
@@ -40,24 +39,27 @@ export async function loadPlaylist(raw, v2) {
   if (p?.kind !== 'playlist' || p.sharing !== 'public') throw new Error('Нужен публичный плейлист SoundCloud');
   const all = p.tracks;
   if (!Array.isArray(all) || !all.length) throw new Error('Плейлист пуст или недоступен');
-  if (all.length > 2000) throw new Error('Поддерживается до 2000 треков в плейлисте');
-  if (Number.isFinite(p.track_count) && p.track_count > all.length) throw new Error('SoundCloud вернул неполный плейлист. Старый каталог сохранён');
-  const trackIds = [...new Set(all.map(t => t?.id).filter(id => Number.isSafeInteger(id) && id > 0))];
-  if (trackIds.length !== new Set(all.map(t => t?.id)).size) throw new Error('SoundCloud вернул некорректный список треков');
+  if (Number.isFinite(p.track_count) && p.track_count !== all.length) throw new Error('SoundCloud вернул неполный плейлист. Старый каталог сохранён');
+  if (all.some(t => !Number.isSafeInteger(t?.id) || t.id <= 0)) throw new Error('SoundCloud вернул трек без корректного id. Старый каталог сохранён');
+  const trackIds = [...new Set(all.map(t => t.id))];
+  const originals = new Map(all.map(t => [t.id, t]));
   const full = new Map();
   for (let i = 0; i < trackIds.length; i += 50) {
     const batch = await v2(`https://api-v2.soundcloud.com/tracks?ids=${trackIds.slice(i, i + 50).join(',')}`);
     if (!Array.isArray(batch)) throw new Error('Не удалось загрузить полные данные треков');
     for (const t of batch) if (t?.id) full.set(t.id, t);
   }
-  const tracks = [];
-  for (const id of trackIds) {
-    const t = full.get(id);
-    try { requirePlayableTrack(t); } catch { continue; }
-    tracks.push({ id, title: t.title ?? '', artist: t.publisher_metadata?.artist || t.user?.username || '', url: t.permalink_url, artwork: (t.artwork_url || t.user?.avatar_url || '').replace('-large', '-t300x300') || undefined });
-  }
-  if (!tracks.length) throw new Error('В плейлисте нет подходящих полных треков длительностью от 45 секунд до 10 минут');
-  return { url, tracks, skipped: trackIds.length - tracks.length, updatedAt: new Date().toISOString() };
+  const tracks = trackIds.map(id => {
+    const original = originals.get(id);
+    const t = { ...original, ...full.get(id) };
+    const title = t.title || original.title;
+    const trackUrl = t.permalink_url || original.permalink_url;
+    if (typeof title !== 'string' || !title.trim() || typeof trackUrl !== 'string' || !trackUrl.trim()) {
+      throw new Error(`SoundCloud не отдал название или ссылку трека #${id}. Импорт остановлен без пропуска треков; старый каталог сохранён`);
+    }
+    return { id, title, artist: t.publisher_metadata?.artist || t.user?.username || '', url: trackUrl, artwork: (t.artwork_url || t.user?.avatar_url || '').replace('-large', '-t300x300') || undefined };
+  });
+  return { url, tracks, skipped: 0, updatedAt: new Date().toISOString() };
 }
 export function mergeTracks(source, manual, blocked) {
   const merged = new Map(source.tracks.map(t => [t.id, t]));
