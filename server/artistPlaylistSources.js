@@ -62,9 +62,12 @@ export async function loadPlaylist(raw, v2) {
   return { url, tracks, skipped: 0, updatedAt: new Date().toISOString() };
 }
 export function mergeTracks(source, manual, blocked) {
+  const selected = new Set(source.tracks.map(t => t.id));
   const merged = new Map(source.tracks.map(t => [t.id, t]));
   for (const t of Object.values(manual ?? {})) merged.set(t.id, t);
-  return [...merged.values()].filter(t => !blocked?.[t.id] && !source.hidden?.[t.id]);
+  // A curated playlist explicitly selects these ids; historical automatic-search exclusions must not shrink it.
+  // Explicit removals within this playlist source remain authoritative.
+  return [...merged.values()].filter(t => !source.hidden?.[t.id] && (selected.has(t.id) || !blocked?.[t.id]));
 }
 const failed = new Map();
 const reports = new Map();
@@ -81,7 +84,7 @@ function gate(req, res, body) {
   }
   return true;
 }
-function present(id) { return sources[id] ? { mode: 'playlist', url: sources[id].url, updatedAt: sources[id].updatedAt, skipped: sources[id].skipped } : { mode: 'automatic', url: null }; }
+function present(id) { return sources[id] ? { mode: 'playlist', url: sources[id].url, updatedAt: sources[id].updatedAt, importedCount: sources[id].tracks.length, skipped: sources[id].skipped } : { mode: 'automatic', url: null }; }
 function pool(id) { return mergeTracks(sources[id], read(MANUAL)[id], read(BLOCKED)[id]); }
 
 // Register after registerArtistEdits (so its title/cover/clip overlay still runs), before registerArtistRoutes.
@@ -107,16 +110,20 @@ export function registerArtistPlaylistSources(app, v2) {
         count = mergeTracks(candidate, read(MANUAL)[id], read(BLOCKED)[id]).length;
         save({ ...sources, [id]: candidate });
       }
+      res.setHeader('Cache-Control', 'no-store');
       res.json({ ok: true, ...present(id), count });
     } catch (e) { res.status(502).json({ error: `Изменения не применены: ${e.message}` }); }
     finally { busy.delete(id); }
   });
   app.get('/api/artist-pool', (req, res, next) => {
-    const id = String(req.query.id ?? ''); if (!sources[id]) return next();
-    try { res.setHeader('Cache-Control', 'no-store'); res.json(pool(id)); }
+    const id = String(req.query.id ?? '');
+    res.setHeader('Cache-Control', 'no-store');
+    if (!sources[id]) return next();
+    try { res.json(pool(id)); }
     catch (e) { next(e); }
   });
   app.use('/api/artists', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
     const send = res.json.bind(res);
     res.json = data => {
       try {

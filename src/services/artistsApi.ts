@@ -89,25 +89,39 @@ export async function adminSetCover(artistId: string, file: File): Promise<void>
   await post('/api/artist-cover', { password: adminPassword(), artistId, dataUrl: await coverDataUrl(file) });
 }
 
-export async function fetchArtists(): Promise<ArtistInfo[]> {
-  const r = await fetch(`${API_BASE}/api/artists`);
-  if (!r.ok) throw new Error(`Ошибка сервера (${r.status})`);
-  const list = (await r.json()) as ArtistInfo[];
+// Desktop used to read only the installed snapshot: writes reached the server, reads stayed stale.
+// Prefer live data. Offline snapshots remain available to players, never as an admin refresh result.
+async function catalogJson(route: string, local: string, fresh = false): Promise<unknown[]> {
+  try {
+    const r = await fetch(`${API_BASE}${route}`, { cache: 'no-store', signal: AbortSignal.timeout(120000) });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error ?? `Ошибка сервера (${r.status})`);
+    }
+    const data = await r.json();
+    if (!Array.isArray(data)) throw new Error('Сервер вернул некорректный каталог');
+    return data;
+  } catch (error) {
+    if (window.location.protocol !== 'guesstrack:' || fresh || hasAdminKey()) throw error;
+    const r = await fetch(`guesstrack://bundle/library/${local}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('Сервер недоступен, локальная библиотека не найдена');
+    const data = await r.json();
+    if (!Array.isArray(data)) throw new Error('Локальная библиотека повреждена');
+    return data;
+  }
+}
+
+export async function fetchArtists(options: { fresh?: boolean } = {}): Promise<ArtistInfo[]> {
+  const list = await catalogJson('/api/artists', 'artists.json', options.fresh) as ArtistInfo[];
   list.forEach(a => names.set(a.id, a.name));
   return list.map(a => (a.artwork?.startsWith('/api/') ? { ...a, artwork: `${API_BASE}${a.artwork}` } : a));
 }
 
-export async function fetchArtistPool(id: string): Promise<Track[]> {
-  const r = await fetch(`${API_BASE}/api/artist-pool?id=${encodeURIComponent(id)}`);
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    throw new Error(body.error ?? `Ошибка сервера (${r.status})`);
-  }
-  const list = ((await r.json()) as Track[]).map(t => ({
+export async function fetchArtistPool(id: string, options: { fresh?: boolean } = {}): Promise<Track[]> {
+  const data = await catalogJson(`/api/artist-pool?id=${encodeURIComponent(id)}`, `pools/${encodeURIComponent(id)}.json`, options.fresh);
+  const list = (data as Track[]).map(t => ({
     ...t,
     ...(t.artwork?.startsWith('/api/') ? { artwork: `${API_BASE}${t.artwork}` } : {}),
-    // Каталог уже содержит исполнителя с учётом ручного добавления и правок админа.
-    // Виджет возвращает username загрузившего: не даём ему перезаписать это поле.
     edited: { ...t.edited, artist: true },
   }));
   list.forEach(t => trackArtist.set(t.id, id));
