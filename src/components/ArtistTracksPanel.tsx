@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Icon from './Icon';
+import ArtistPlaylistSource from './ArtistPlaylistSource';
 import { adminDeleteTrack, adminEditArtistTrack, adminRebuildArtist, fetchArtistPool, type ArtistInfo } from '../services/artistsApi';
 import { API_BASE } from '../config';
 import { uploadClip } from '../services/clipUpload';
@@ -28,6 +29,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
   const [coverUrl, setCoverUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sourceBusy, setSourceBusy] = useState(false);
   const [saved, setSaved] = useState('');
   const [editId, setEditId] = useState<number | null>(null);
   const [eTitle, setETitle] = useState('');
@@ -129,7 +131,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
       setNote(r.busy ? 'Каталог уже собирается' : 'Пересборка запущена. Закройте и снова откройте артиста через пару минут');
     } catch (err) { setError((err as Error).message); }
   };
-  const locked = busyId !== null || saving || editBusy;
+  const locked = busyId !== null || saving || editBusy || sourceBusy;
   return <div className='tracks-panel'>
     <div className='tracks-head'>
       <b>{artist.name}</b><span className='muted small'>{tracks ? `${tracks.length} треков` : ''}</span>
@@ -140,6 +142,7 @@ export default function ArtistTracksPanel({ artist, onClose, onRemoved, onResetC
         <button className='chip' onClick={onClose}>Закрыть</button>
       </div>
     </div>
+    <ArtistPlaylistSource key={artist.id} artistId={artist.id} disabled={busyId !== null || saving || editBusy} onBusy={setSourceBusy} onApplied={() => refresh(artist.id)}/>
     {note && <p role='status' className='muted small'>{note}</p>}
     {formOpen && <form className='block' onSubmit={add}>
       <label>Название трека<input className='input' required maxLength={300} value={title} disabled={saving} onChange={e => setTitle(e.target.value)} /></label>

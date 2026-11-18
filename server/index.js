@@ -9,6 +9,7 @@ import { WebSocketServer } from 'ws';
 await import('./geniusCache.js');
 const { registerArtistRoutes } = await import('./artists.js');
 const { registerArtistEdits } = await import('./artistEdits.js');
+const { registerArtistPlaylistSources } = await import('./artistPlaylistSources.js');
 const { registerFeaturedRoutes, overlayPlaylistInfo } = await import('./featured.js');
 
 let registerDesktopLibrary = null;
@@ -205,6 +206,7 @@ app.get('/api/playlist-info', async (req, res) => {
 
 // Правки админа в треках артистов: модуль подключается до маршрутов артистов, чтобы дополнять их ответ: см. server/artistEdits.js
 registerArtistEdits(app);
+registerArtistPlaylistSources(app, v2);
 // Каталоги артистов (Kai Angel, madk1d и др.): см. server/artists.js
 registerArtistRoutes(app, v2);
 // Правки админа в плейлисте GuessTrack: см. server/featured.js
