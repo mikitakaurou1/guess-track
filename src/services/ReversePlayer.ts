@@ -2,6 +2,49 @@ import type { SoundCloudPlayer } from './SoundCloudPlayer';
 import type { Track } from '../types/game';
 import { API_BASE } from '../config';
 const BASE = String(import.meta.env.VITE_REVERSE_API_URL || API_BASE).replace(/\/$/, '');
+const blobs = new Map<string, { blob: Blob; until: number }>();
+const downloads = new Map<string, Promise<Blob>>();
+let blobBytes = 0;
+let warmedAt = 0;
+function warmService() {
+  if (!BASE || Date.now() - warmedAt < 60000) return;
+  warmedAt = Date.now();
+  void fetch(`${BASE}/health`, { cache: 'no-store', signal: AbortSignal.timeout(20000) }).catch(() => {});
+}
+function cachedBlob(src: string): Promise<Blob> {
+  for (const [key, item] of blobs) {
+    if (item.until <= Date.now()) { blobBytes -= item.blob.size; blobs.delete(key); }
+  }
+  const hit = blobs.get(src);
+  if (hit) { blobs.delete(src); blobs.set(src, hit); return Promise.resolve(hit.blob); }
+  const pending = downloads.get(src);
+  if (pending) return pending;
+  if (downloads.size >= 10) return Promise.reject(new Error('Reverse client queue full'));
+  const promise = (async () => {
+    const r = await fetch(src, { signal: AbortSignal.timeout(185000) });
+    if (!r.ok || !(r.headers.get('content-type') || '').startsWith('audio/')) throw new Error('Reverse audio unavailable');
+    const blob = await r.blob();
+    if (blob.size < 44 || blob.size > 12 * 1024 * 1024) throw new Error('Invalid reverse audio size');
+    while (blobs.size && (blobBytes + blob.size > 32 * 1024 * 1024 || blobs.size >= 8)) {
+      const key = blobs.keys().next().value;
+      if (key === undefined) break;
+      blobBytes -= blobs.get(key)!.blob.size; blobs.delete(key);
+    }
+    blobs.set(src, { blob, until: Date.now() + 30 * 60 * 1000 }); blobBytes += blob.size;
+    return blob;
+  })().finally(() => { downloads.delete(src); });
+  downloads.set(src, promise);
+  return promise;
+}
+function waitBlob(src: string, signal: AbortSignal): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const cancel = () => { reject(new Error('Reverse listener cancelled')); };
+    if (signal.aborted) { cancel(); return; }
+    signal.addEventListener('abort', cancel, { once: true });
+    // Cancel only this listener. Shared downloads/preloads still populate the bounded cache.
+    void cachedBlob(src).then(resolve, reject).finally(() => signal.removeEventListener('abort', cancel));
+  });
+}
 function permalink(raw: string): string | null {
   try {
     const u = new URL(raw.trim());
@@ -14,10 +57,9 @@ export function reverseSrc(raw: string, seconds: number): string | null {
   const url = permalink(raw);
   return url ? `${BASE}/api/reverse?${new URLSearchParams({ url, seconds: String(Math.min(60, Math.max(1, seconds))) })}` : null;
 }
-// Сохраняем контракт существующего плеера, меняя только аудиодвижок.
-// Не переопределённые методы (например, загрузка плейлистов) работают через SoundCloud.
-// На карточке трека (playFull / playOriginal) звучит оригинал через исходный плеер SoundCloud.
+// Сохраняем контракт существующего плеера и оригинал SoundCloud на карточке раскрытого трека.
 export function createReversePlayer(original: SoundCloudPlayer, seconds: () => number): SoundCloudPlayer {
+  warmService();
   const audio = new Audio();
   audio.preload = 'auto';
   const progress = new Set<(ms: number) => void>();
@@ -45,10 +87,8 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
     const controller = new AbortController(); abort = controller;
     const timer = setTimeout(() => controller.abort(), 185000);
     try {
-      const r = await fetch(src, { signal: controller.signal });
-      if (!r.ok || !(r.headers.get('content-type') || '').startsWith('audio/')) return false;
-      const blob = await r.blob();
-      if (token !== generation) return false;
+      const blob = await waitBlob(src, controller.signal);
+      if (token !== generation || controller.signal.aborted) return false;
       objectUrl = URL.createObjectURL(blob);
       audio.src = objectUrl;
       prepared = true;
@@ -102,7 +142,6 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
     },
     playWarmed: () => { report = true; audio.currentTime = 0; play(); },
     playFromStart: () => { report = true; audio.currentTime = 0; play(); },
-    // Карточка трека (хозяин): догружаем оригинал в плеер SoundCloud и играем с начала
     playFull: () => {
       stop();
       const g = ++generation;
@@ -111,7 +150,6 @@ export function createReversePlayer(original: SoundCloudPlayer, seconds: () => n
       original.setStartMode(undefined);
       void original.prepareTrack(t, false).then(info => { if (g === generation && info) original.playFull(); });
     },
-    // Карточка трека (гость): оригинал по ссылке из снимка комнаты
     playOriginal: (src: string) => {
       stop();
       const g = ++generation;
