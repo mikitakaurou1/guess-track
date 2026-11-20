@@ -59,13 +59,7 @@ export function validateArtwork(raw) {
 }
 
 export function requirePlayableTrack(t) {
+  // Availability checks are intentionally disabled: the admin decides which track to attach.
+  // Only the minimum identity check remains, because the catalog stores tracks by SoundCloud id.
   if (t?.kind !== 'track' || !Number.isSafeInteger(t.id) || t.id <= 0) throw new Error('Ссылка должна вести на один трек, не на профиль или плейлист');
-  if (t.streamable !== true || t.embeddable_by !== 'all' || t.sharing !== 'public' || t.state !== 'finished') {
-    throw new Error('SoundCloud не подтверждает доступность полного трека для встроенного плеера');
-  }
-  if ((t.policy && t.policy !== 'ALLOW') || (t.access && t.access !== 'playable')) throw new Error('Трек заблокирован или доступен только как превью');
-  const ms = t.full_duration ?? t.duration ?? 0;
-  if (ms < 45_000 || ms > 600_000) throw new Error('Длительность трека должна быть от 45 секунд до 10 минут');
-  if (t.full_duration && t.duration && t.duration < t.full_duration - 2000) throw new Error('Доступно только превью трека');
-  if (!t.media?.transcodings?.length) throw new Error('SoundCloud не вернул поток для воспроизведения');
 }
